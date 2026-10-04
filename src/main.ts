@@ -12,6 +12,9 @@ import { MotionRenderer } from './motion-renderer';
 import { RenderQuality } from './render-quality';
 import { frameAssemblyAttachments } from './frame-assembly';
 import { equipmentContext, type RelationRole } from './part-relations';
+import { SpatialIndex, surfaceAnchor, worldVisible } from './spatial-index';
+import { AnchorRegistry, anchorWorldPoint, pointWorldMatrix, finiteVector, validBinding, type AnchorBinding } from './spatial-anchors';
+import modelIdentity from './model-identity.json';
 import './style.css';
 import './presentation.css';
 import './responsive.css';
@@ -53,12 +56,17 @@ type AnnotationViewpoint = {
   cameraPosition: [number, number, number];
   cameraUp: [number, number, number];
   target: [number, number, number];
+  framing?:'presentation'|'full';
+  viewport?:[number,number];
+  inputAngle?:number;
+  projection?:{fov:number;near:number;far:number;zoom:number};
 };
 type EngineeringAnnotation = {
   id: string;
   sequence: number;
   partLabel: string;
   meshPath: number[];
+  binding?:AnchorBinding;
   localPosition: [number, number, number];
   localNormal: [number, number, number];
   title: string;
@@ -98,6 +106,9 @@ type SensorRuntime = SensorDefinition & {
   mesh: THREE.Mesh;
   localPosition: [number, number, number];
   value: number | null;
+  localNormal:[number,number,number];
+  binding:AnchorBinding;
+  anchorDescription:string;
   sourceTimestamp: string;
   serverTimestamp: string;
   quality: SensorQuality;
@@ -203,6 +214,12 @@ const coloredXrayMaterialCaches = new Map<string, WeakMap<THREE.Material, THREE.
 const generatedXrayMaterials = new Set<THREE.Material>();
 const meshToPart = new WeakMap<THREE.Object3D, PartRecord>();
 const majorMeshToPart=new WeakMap<THREE.Object3D,PartRecord>();
+const spatialOwner=new WeakMap<THREE.Object3D,PartRecord>();
+const spatialIndex=new SpatialIndex();
+let anchorRegistry:AnchorRegistry|null=null;
+let spatialMeshes:THREE.Mesh[]=[];
+let visibleSpatialMeshes:THREE.Mesh[]=[];
+let spatialCandidatesDirty=true;
 let selectedRelationships:ReturnType<typeof equipmentContext>|null=null;
 const demoMaterialColors=new Map<THREE.Material,THREE.Color>();
 const movingMeshKinds = new WeakMap<THREE.Mesh, 'rotor' | 'drivetrain'>();
@@ -415,7 +432,8 @@ const sensorMarkerElements = new Map<string, HTMLButtonElement>();
 const sensorRowElements = new Map<string, HTMLButtonElement>();
 const annotations: EngineeringAnnotation[] = [];
 const sensors: SensorRuntime[] = [];
-const ANNOTATION_STORAGE_KEY = 'wind-turbine-engineering-annotations-v1';
+const LEGACY_ANNOTATION_STORAGE_KEY = 'wind-turbine-engineering-annotations-v1';
+const ANNOTATION_STORAGE_KEY = 'wind-turbine-engineering-annotations-v2';
 let annotationModeActive = false;
 let activeAnnotationId: string | null = null;
 let pendingAnnotationId: string | null = null;
@@ -473,7 +491,7 @@ const displayFrameQuad=new THREE.Mesh(staticFrameQuad.geometry,displayFrameMater
 displayFrameScene.add(displayFrameQuad);
 function invalidateStaticFrame(bindingsChanged=true): void {
   staticFrameDirty = true; renderRequested = true;
-  if(bindingsChanged){motionRenderer?.invalidateBindings();fixedRenderer?.invalidateBindings();generatorGlassRenderer?.invalidateBindings();}
+  if(bindingsChanged){spatialCandidatesDirty=true;motionRenderer?.invalidateBindings();fixedRenderer?.invalidateBindings();generatorGlassRenderer?.invalidateBindings();}
 }
 
 function ensureFrameTarget(): void {
@@ -1756,13 +1774,14 @@ function majorPartForMesh(mesh: THREE.Mesh): PartRecord | null {
 }
 
 function annotationPartLabel(mesh: THREE.Mesh): string {
-  return majorPartForMesh(mesh)?.label
+  return spatialOwner.get(mesh)?.label??majorPartForMesh(mesh)?.label
     ?? meshToPart.get(mesh)?.label
     ?? leafNodeName(mesh.parent ?? mesh)
     ?? '未命名零件';
 }
 
 function annotationMesh(annotation: EngineeringAnnotation): THREE.Mesh | null {
+  if(annotation.binding)return anchorRegistry?.resolve(annotation.binding)??null;
   const cached = annotationMeshLookup.get(annotation.id);
   if (cached) return cached;
   const resolved = meshFromModelPath(annotation.meshPath);
@@ -1773,8 +1792,7 @@ function annotationMesh(annotation: EngineeringAnnotation): THREE.Mesh | null {
 function annotationWorldPoint(annotation: EngineeringAnnotation): THREE.Vector3 | null {
   const mesh = annotationMesh(annotation);
   if (!mesh) return null;
-  mesh.updateWorldMatrix(true, false);
-  return mesh.localToWorld(new THREE.Vector3(...annotation.localPosition));
+  return anchorWorldPoint(mesh,annotation.localPosition,annotation.binding);
 }
 
 function captureAnnotationViewpoint(): AnnotationViewpoint {
@@ -1782,21 +1800,30 @@ function captureAnnotationViewpoint(): AnnotationViewpoint {
     cameraPosition: camera.position.toArray(),
     cameraUp: camera.up.toArray(),
     target: controls.target.toArray(),
+    framing:camera.view?.enabled?'presentation':'full',
+    viewport:[viewportWidth,viewportHeight],
+    inputAngle:drivetrain?.inputAngle??0,
+    projection:{fov:camera.fov,near:camera.near,far:camera.far,zoom:camera.zoom},
   };
 }
 
 function isAnnotationViewpoint(value: unknown): value is AnnotationViewpoint {
   if (!value || typeof value !== 'object') return false;
   const viewpoint = value as Partial<AnnotationViewpoint>;
-  return Array.isArray(viewpoint.cameraPosition) && viewpoint.cameraPosition.length === 3
-    && Array.isArray(viewpoint.cameraUp) && viewpoint.cameraUp.length === 3
-    && Array.isArray(viewpoint.target) && viewpoint.target.length === 3;
+  return finiteVector(viewpoint.cameraPosition)&&finiteVector(viewpoint.cameraUp)&&finiteVector(viewpoint.target)
+    &&viewpoint.cameraUp.some(v=>Math.abs(v)>1e-12)&&viewpoint.cameraPosition.some((v,i)=>Math.abs(v-viewpoint.target![i])>1e-12)
+    &&(viewpoint.framing===undefined||viewpoint.framing==='presentation'||viewpoint.framing==='full')
+    &&(viewpoint.viewport===undefined||(Array.isArray(viewpoint.viewport)&&viewpoint.viewport.length===2&&viewpoint.viewport.every(v=>Number.isFinite(v)&&v>0)))
+    &&(viewpoint.inputAngle===undefined||Number.isFinite(viewpoint.inputAngle))
+    &&(viewpoint.projection===undefined||(!!viewpoint.projection&&typeof viewpoint.projection==='object'&&Number.isFinite(viewpoint.projection.fov)&&viewpoint.projection.fov>0&&viewpoint.projection.fov<180
+      &&Number.isFinite(viewpoint.projection.near)&&viewpoint.projection.near>0&&Number.isFinite(viewpoint.projection.far)&&viewpoint.projection.far>viewpoint.projection.near
+      &&Number.isFinite(viewpoint.projection.zoom)&&viewpoint.projection.zoom>0));
 }
 
 function persistAnnotations(): void {
   try {
     const saved = annotations.filter((annotation) => annotation.id !== pendingAnnotationId);
-    localStorage.setItem(ANNOTATION_STORAGE_KEY, JSON.stringify(saved));
+    localStorage.setItem(ANNOTATION_STORAGE_KEY, JSON.stringify({schemaVersion:2,records:saved}));
   } catch (error) {
     console.warn('工程标注无法写入本地存储', error);
   }
@@ -1806,11 +1833,11 @@ function isStoredAnnotation(value: unknown): value is EngineeringAnnotation {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<EngineeringAnnotation>;
   return typeof item.id === 'string'
-    && typeof item.sequence === 'number'
+    && Number.isInteger(item.sequence)&&Number(item.sequence)>0
     && typeof item.partLabel === 'string'
-    && Array.isArray(item.meshPath)
-    && Array.isArray(item.localPosition) && item.localPosition.length === 3
-    && Array.isArray(item.localNormal) && item.localNormal.length === 3
+    && Array.isArray(item.meshPath)&&item.meshPath.every(i=>Number.isInteger(i)&&i>=0)
+    && finiteVector(item.localPosition)&&finiteVector(item.localNormal)
+    && (item.binding===undefined||validBinding(item.binding))
     && typeof item.title === 'string'
     && typeof item.description === 'string'
     && ['一般', '注意', '重要', '紧急'].includes(item.severity ?? '')
@@ -1823,14 +1850,21 @@ function loadStoredAnnotations(): void {
   annotations.length = 0;
   annotationMeshLookup.clear();
   try {
-    const raw = localStorage.getItem(ANNOTATION_STORAGE_KEY);
+    const raw = localStorage.getItem(ANNOTATION_STORAGE_KEY)??localStorage.getItem(LEGACY_ANNOTATION_STORAGE_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return;
-    parsed.filter(isStoredAnnotation).forEach((annotation) => {
-      const mesh = meshFromModelPath(annotation.meshPath);
-      if (!mesh) return;
+    const records=Array.isArray(parsed)?parsed:(parsed as {schemaVersion?:number;records?:unknown})?.schemaVersion===2?(parsed as {records:unknown}).records:[];
+    if (!Array.isArray(records)) return;
+    records.filter(isStoredAnnotation).forEach((annotation) => {
+      // v1 always used the preserved source GLB. Adopt only a matching part;
+      // keep unresolved records in the list instead of silently dropping them.
+      if(!annotation.binding){
+        const mesh=meshFromModelPath(annotation.meshPath),label=annotation.partLabel==='变压器'?'辅助变压器':annotation.partLabel;
+        if(mesh&&annotationPartLabel(mesh)===label)annotation.binding=anchorRegistry?.bind(mesh)??undefined;
+        else annotation.binding={rootId:'source',modelVersion:'unverified-legacy',objectId:''};
+      }
+      const mesh=annotationMesh(annotation);
       annotations.push(annotation);
-      annotationMeshLookup.set(annotation.id, mesh);
+      if(mesh)annotationMeshLookup.set(annotation.id, mesh);
     });
   } catch (error) {
     console.warn('工程标注记录读取失败', error);
@@ -1947,7 +1981,8 @@ function updateAnnotationOverlay(): void {
   annotations.forEach((annotation) => {
     const marker = annotationMarkerElements.get(annotation.id);
     const worldPoint = annotationWorldPoint(annotation);
-    if (!marker || !worldPoint) return;
+    if (!marker) return;
+    if(!worldPoint||!worldVisible(annotationMesh(annotation)!)){marker.hidden=true;return;}
     const projected = worldPoint.project(camera);
     const visible = projected.z > -1 && projected.z < 1;
     if(marker.hidden===visible)marker.hidden=!visible;
@@ -1981,7 +2016,7 @@ function renderAnnotationList(): void {
     const title = document.createElement('strong');
     title.textContent = annotation.title || '待填写标注';
     const meta = document.createElement('small');
-    meta.textContent = `${annotation.partLabel} · ${annotation.status}`;
+    meta.textContent = `${annotation.partLabel} · ${annotationMesh(annotation)?annotation.status:'定位待确认'}`;
     content.append(title, meta);
     const severity = document.createElement('span');
     severity.className = 'annotation-severity';
@@ -2033,13 +2068,26 @@ function focusAnnotation(annotation: EngineeringAnnotation): void {
   const worldPoint = annotationWorldPoint(annotation);
   if (!mesh || !worldPoint) return;
   if (annotation.viewpoint) {
+    homeFramingActive=false;
+    const saved=annotation.viewpoint;
+    if(saved.projection){camera.fov=saved.projection.fov;camera.zoom=saved.projection.zoom;}
+    const resized=saved.viewport&&(Math.abs(saved.viewport[0]-viewportWidth)>2||Math.abs(saved.viewport[1]-viewportHeight)>2);
+    if(resized){
+      const direction=new THREE.Vector3(...saved.cameraPosition).sub(new THREE.Vector3(...saved.target)).normalize();
+      const owner=majorPartByLabel(annotation.partLabel),bounds=owner?partBounds(owner):new THREE.Box3().setFromObject(mesh);
+      fitBounds(bounds,direction,1.2,worldPoint,presentationFrame());invalidateStaticFrame();return;
+    }
     camera.position.fromArray(annotation.viewpoint.cameraPosition);
     camera.up.fromArray(annotation.viewpoint.cameraUp);
     controls.target.fromArray(annotation.viewpoint.target);
-    camera.near = Math.max(modelSize.length() / 100000, .001);
-    camera.far = Math.max(modelSize.length() * 20, 100);
+    camera.near = saved.projection?.near??Math.max(modelSize.length() / 100000, .001);
+    camera.far = saved.projection?.far??Math.max(modelSize.length() * 20, 100);
+    camera.aspect=viewportWidth/Math.max(viewportHeight,1);
+    if(saved.framing==='full')camera.clearViewOffset();else applyPresentationOffset(presentationFrame());
+    const distance=camera.position.distanceTo(controls.target);
+    controls.minDistance=Math.max(distance*.001,.001);controls.maxDistance=Math.max(distance*100,10);
     camera.updateProjectionMatrix();
-    controls.update();
+    updateCameraPreset();
     invalidateStaticFrame();
     return;
   }
@@ -2061,6 +2109,12 @@ function selectAnnotation(id: string, focus = false, edit = false): void {
   if (pendingAnnotationId && pendingAnnotationId !== id) closeAnnotationEditor(true, true);
   const annotation = annotations.find((item) => item.id === id);
   if (!annotation) return;
+  if(focus&&annotationMesh(annotation)){
+    const owner=majorPartByLabel(annotation.partLabel);if(owner&&owner!==selectedPart)selectPart(owner,false,true);
+  }
+  if(focus&&annotation.binding&&annotation.binding.rootId!=='source'&&annotationMesh(annotation)){
+    setPresentationMode('drivetrain');applyDisplayMode(displayMode);
+  }
   setAnnotationPanelOpen(true);
   activeAnnotationId = annotation.id;
   if (edit || id === pendingAnnotationId) openAnnotationEditor(annotation, id === pendingAnnotationId);
@@ -2106,39 +2160,23 @@ function isPickThroughShell(mesh:THREE.Mesh):boolean{
     || revealVendorInternals(mesh);
 }
 
-function chooseAnnotationIntersection(intersections: THREE.Intersection[]): THREE.Intersection | null {
-  const usable = intersections.filter((intersection) => {
-    const mesh = intersection.object as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible) return false;
-    if (partFocusActive && selectedPart && !belongsToPart(mesh, selectedPart)) return false;
-    if(isPickThroughShell(mesh)&&!(selectedPart?.role==='shell'&&belongsToPart(mesh,selectedPart)))return false;
-    return true;
-  });
-  return usable.find((intersection) => !isPresentationShell(intersection.object as THREE.Mesh)) ?? usable[0] ?? null;
-}
-
 function placeAnnotationAtPointer(event: PointerEvent): void {
   if (!annotationModeActive || !modelRoot) return;
   restoreFullDetail();
-  const rect = canvas.getBoundingClientRect();
-  annotationPointer.set(
-    ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 2 - 1,
-    -((event.clientY - rect.top) / Math.max(rect.height, 1)) * 2 + 1,
-  );
-  annotationRaycaster.setFromCamera(annotationPointer, camera);
-  const intersection = chooseAnnotationIntersection(annotationRaycaster.intersectObject(modelRoot, true));
+  const intersection = spatialIntersectionAtPoint(event.clientX,event.clientY,true);
   if (!intersection) {
     setAnnotationTip('请点击可见零件表面。', true);
     return;
   }
   const mesh = intersection.object as THREE.Mesh;
   const meshPath = objectPathFromModelRoot(mesh);
-  if (!meshPath.length) {
+  const binding=anchorRegistry?.bind(mesh,intersection.instanceId);
+  if (!binding) {
     setAnnotationTip('此位置无法标注，请选择其他零件。', true);
     return;
   }
   if (pendingAnnotationId) deleteAnnotation(pendingAnnotationId);
-  const localPosition = mesh.worldToLocal(intersection.point.clone());
+  const localPosition = intersection.point.clone().applyMatrix4(pointWorldMatrix(mesh,intersection.instanceId).invert());
   const localNormal = intersection.face?.normal.clone().normalize() ?? new THREE.Vector3(0, 1, 0);
   const nextSequence = annotations.reduce((maximum, annotation) => Math.max(maximum, annotation.sequence), 0) + 1;
   const id = globalThis.crypto?.randomUUID?.() ?? `annotation-${Date.now()}-${nextSequence}`;
@@ -2147,6 +2185,7 @@ function placeAnnotationAtPointer(event: PointerEvent): void {
     sequence: nextSequence,
     partLabel: annotationPartLabel(mesh),
     meshPath,
+    binding,
     localPosition: localPosition.toArray(),
     localNormal: localNormal.toArray(),
     title: '待填写标注',
@@ -2175,10 +2214,20 @@ function majorPartByLabel(label: string): PartRecord | null {
   return null;
 }
 
-function largestSensorMesh(part: PartRecord): THREE.Mesh | null {
+function sensorTarget(definition:SensorDefinition,part:PartRecord):{mesh:THREE.Mesh;description:string}|null{
+  const generator=drivetrain?.generatorModel;
+  let root:THREE.Object3D=part.node,description=definition.name+'测点示意';
+  if(definition.id==='WT01-GEN-WT01'&&generator){root=generator.statorCoils;description='定子绕组 · 示意测点';}
+  else if(definition.id==='WT01-GEN-BT01'&&generator){root=generator.bearings[0].outerRace;description='驱动端轴承外圈 · 示意测点';}
+  else{
+    const pattern=definition.id==='WT01-HYD-P01'?/^液压站(?:-\d+)?$/:
+      definition.id==='WT01-YAW-V01'?/^偏航驱动组件(?:-\d+)?$/:
+      definition.id==='WT01-MS-V01'?/^主轴-\d+$/:null;
+    if(pattern){let found:THREE.Object3D|undefined;part.node.traverse(n=>{if(!found&&pattern.test(leafNodeName(n)))found=n;});if(!found)return null;root=found;}
+  }
   let largest: THREE.Mesh | null = null;
   let largestVolume = -1;
-  part.node.traverse((object) => {
+  root.traverse((object) => {
     if (!(object as THREE.Mesh).isMesh) return;
     const mesh = object as THREE.Mesh;
     const size = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
@@ -2187,23 +2236,22 @@ function largestSensorMesh(part: PartRecord): THREE.Mesh | null {
     largest = mesh;
     largestVolume = volume;
   });
-  return largest;
+  return largest?{mesh:largest,description}:null;
 }
 
-function sensorAnchorPosition(mesh: THREE.Mesh, anchor: [number, number, number]): [number, number, number] {
-  mesh.geometry.computeBoundingBox();
-  const box = mesh.geometry.boundingBox;
-  if (!box) return [0, 0, 0];
-  return [
+function sensorAnchorSeed(geometry:THREE.BufferGeometry, anchor: [number, number, number]): THREE.Vector3 {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return new THREE.Vector3();
+  return new THREE.Vector3(
     THREE.MathUtils.lerp(box.min.x, box.max.x, anchor[0]),
     THREE.MathUtils.lerp(box.min.y, box.max.y, anchor[1]),
     THREE.MathUtils.lerp(box.min.z, box.max.z, anchor[2]),
-  ];
+  );
 }
 
 function sensorWorldPoint(sensor: SensorRuntime): THREE.Vector3 {
-  sensor.mesh.updateWorldMatrix(true, false);
-  return sensor.mesh.localToWorld(new THREE.Vector3(...sensor.localPosition));
+  return anchorWorldPoint(sensor.mesh,sensor.localPosition,sensor.binding);
 }
 
 function sensorStatus(value: number | null, quality: SensorQuality, warning: number, alarm: number): SensorStatus {
@@ -2399,7 +2447,7 @@ function renderSensorDetail(sensor: SensorRuntime): void {
   sensorPanel.classList.add('detail-open');
   sensorDetailId.textContent = sensor.id;
   sensorDetailName.textContent = sensor.name;
-  sensorDetailPart.textContent = sensor.partLabel;
+  sensorDetailPart.textContent = `${sensor.partLabel} · ${sensor.anchorDescription}${worldVisible(sensor.mesh)?'':' · 开启传动透视查看'}`;
   sensorDetailValue.textContent = formatSensorValue(sensor);
   sensorDetailUnit.textContent = sensor.unit;
   sensorDetailStatus.textContent = sensorStatusText(sensor.status);
@@ -2452,7 +2500,7 @@ function updateSensorOverlay(): void {
   sensors.forEach((sensor) => {
     const marker = sensorMarkerElements.get(sensor.id);
     if (!marker) return;
-    if (!sensorLayerVisible || (sensor.status !== 'alarm' && sensor.id !== selectedSensorId)) {
+    if (!sensorLayerVisible || !worldVisible(sensor.mesh) || (sensor.status !== 'alarm' && sensor.id !== selectedSensorId)) {
       if(!marker.hidden)marker.hidden=true;
       return;
     }
@@ -2500,8 +2548,9 @@ function createAnnotationFromSensor(): void {
     sequence: nextSequence,
     partLabel: sensor.partLabel,
     meshPath: objectPathFromModelRoot(sensor.mesh),
+    binding:sensor.binding,
     localPosition: [...sensor.localPosition],
-    localNormal: [0, 1, 0],
+    localNormal: [...sensor.localNormal],
     title: `${sensor.name}${sensor.status === 'alarm' ? '报警' : '预警'}`,
     description: `传感器 ${sensor.id} 当前值：${formatSensorValue(sensor)} ${sensor.unit}；数据质量：${sensorQualityText(sensor.quality)}；源时间：${sensor.sourceTimestamp}。`,
     severity: sensor.status === 'alarm' ? '紧急' : '注意',
@@ -2520,7 +2569,7 @@ function createAnnotationFromSensor(): void {
   annotationSeverity.value = annotation.severity;
 }
 
-function initializeSensors(): void {
+async function initializeSensors(): Promise<void> {
   stopSensorStream?.();
   stopSensorStream = null;
   selectedSensorId = null;
@@ -2529,24 +2578,32 @@ function initializeSensors(): void {
   sensors.length = 0;
   sensorMarkerElements.clear();
   sensorRowElements.clear();
-  SENSOR_DEFINITIONS.forEach((definition) => {
+  const prepared=await Promise.all(SENSOR_DEFINITIONS.map(async(definition):Promise<SensorRuntime|null> => {
     const part = majorPartByLabel(definition.partLabel);
-    if (!part) return;
-    const mesh = largestSensorMesh(part);
-    if (!mesh) return;
-    sensors.push({
+    if (!part) return null;
+    const target=sensorTarget(definition,part);
+    if (!target) return null;
+    const {mesh,description}=target;
+    const geometry=mesh.geometry;
+    await spatialIndex.ensure(geometry);
+    const binding=anchorRegistry?.bind(mesh,(mesh as THREE.InstancedMesh).isInstancedMesh?0:undefined);
+    if(!binding)return null;
+    const anchor=surfaceAnchor(mesh,sensorAnchorSeed(geometry,definition.anchor),geometry);
+    return {
       ...definition,
       part,
       mesh,
-      localPosition: sensorAnchorPosition(mesh, definition.anchor),
+      binding,anchorDescription:description,
+      localPosition:anchor.position.toArray(),localNormal:anchor.normal.toArray(),
       value: null,
       sourceTimestamp: '',
       serverTimestamp: '',
       quality: 'bad',
       status: 'offline',
       history: [],
-    });
-  });
+    };
+  }));
+  sensors.push(...prepared.filter((sensor):sensor is SensorRuntime=>sensor!==null));
   renderSensorUi();
   stopSensorStream = createDemoSensorAdapter().start(applySensorValue);
 }
@@ -2711,39 +2768,55 @@ canvas.addEventListener('pointercancel',event=>{
 });
 canvas.addEventListener('dblclick', setOrbitPivotFromPointer);
 
-function pickPartAtPoint(clientX:number,clientY:number):PartRecord|null{
+function initializeSpatialRegistry():void{
+  if(!modelRoot)return;
+  const roots=[{id:'source',version:modelIdentity.source,root:modelRoot},
+    ...(drivetrain?.demonstrations??[]).map((d,i)=>({id:i===0?'gearbox':'generator',version:i===0?modelIdentity.gearbox:modelIdentity.generator,root:d.root}))];
+  anchorRegistry=new AnchorRegistry(roots);
+  const seen=new Set<THREE.Mesh>();spatialMeshes=[];
+  for(const {id,root}of roots)root.traverse(object=>{
+    const mesh=object as THREE.Mesh;if(!mesh.isMesh||seen.has(mesh))return;seen.add(mesh);spatialMeshes.push(mesh);
+    const owner=majorMeshToPart.get(mesh)??(id==='source'?majorPartForMesh(mesh):majorPartByLabel(id==='gearbox'?'齿轮箱':'发电机'));
+    if(owner)spatialOwner.set(mesh,owner);
+  });
+  spatialCandidatesDirty=true;
+}
+
+function spatialIntersectionAtPoint(clientX:number,clientY:number,annotation=false):THREE.Intersection|null{
   if(!modelRoot||!majorPartGroups.length)return null;
   const rect=canvas.getBoundingClientRect();
   annotationPointer.set((clientX-rect.left)/rect.width*2-1,-(clientY-rect.top)/rect.height*2+1);
+  camera.updateMatrixWorld(true);
   annotationRaycaster.setFromCamera(annotationPointer,camera);
-  const roots=[...new Set(majorPartGroups.flatMap(group=>group.parts.flatMap(partRoots)))];
-  drivetrain?.demonstrations.forEach(d=>{if(d.root.visible)roots.push(d.root);});
-  const partOf=(object:THREE.Object3D):PartRecord|null=>{
-    const explicit=majorMeshToPart.get(object);if(explicit)return explicit;
-    for(const [index,demo]of (drivetrain?.demonstrations??[]).entries())if(isWithinSelectedAssembly(object,demo.root))return majorPartByLabel(index===0?'齿轮箱':'发电机');
-    return majorPartForMesh(object as THREE.Mesh);
-  };
-  const interiors:THREE.Mesh[]=[],blades:THREE.Mesh[]=[],seen=new Set<THREE.Object3D>();
-  for(const root of roots){
-    let visible=true;for(let p:THREE.Object3D|null=root;p;p=p.parent)visible&&=p.visible;
-    if(!visible)continue;
-    root.traverseVisible(object=>{
-      const mesh=object as THREE.Mesh;
-      if(!mesh.isMesh||seen.has(mesh))return;seen.add(mesh);
-      if(isPickThroughShell(mesh)||!partOf(mesh))return;
-      if(!(Array.isArray(mesh.material)?mesh.material:[mesh.material]).some(m=>m.visible&&m.opacity>0))return;
-      (bladeMeshes.has(mesh)?blades:interiors).push(mesh);
-    });
+  if(spatialCandidatesDirty){
+    visibleSpatialMeshes=spatialMeshes.filter(mesh=>worldVisible(mesh)&&(Array.isArray(mesh.material)?mesh.material:[mesh.material]).some(m=>m.visible&&m.opacity>0));
+    spatialCandidatesDirty=false;
   }
-  // Do not raycast through millions of enclosure triangles only to select their
-  // front surface. Transparent covers never win a fallback over a hidden part.
+  const interiors:THREE.Mesh[]=[],shells:THREE.Mesh[]=[];
+  for(const mesh of visibleSpatialMeshes){
+    const owner=spatialOwner.get(mesh);
+    if(!annotation&&!owner)continue;
+    if(annotation&&partFocusActive&&selectedPart&&owner!==selectedPart)continue;
+    const explicitShell=annotation&&partFocusActive&&selectedPart?.role==='shell'&&owner===selectedPart;
+    if(isPickThroughShell(mesh)&&!explicitShell)continue;
+    (isPresentationShell(mesh)&&!explicitShell?shells:interiors).push(mesh);
+  }
   const candidates=annotationRaycaster.intersectObjects(interiors,false);
-  const preferred=candidates.find(hit=>{
+  const hitMaterial=(hit:THREE.Intersection)=>{
     const mesh=hit.object as THREE.Mesh;
-    const material=Array.isArray(mesh.material)?mesh.material[hit.face?.materialIndex??0]:mesh.material;
-    return material.visible&&material.opacity>=.2;
-  })??candidates[0]??annotationRaycaster.intersectObjects(blades,false)[0];
-  return preferred?partOf(preferred.object):null;
+    return Array.isArray(mesh.material)?mesh.material[hit.face?.materialIndex??0]:mesh.material;
+  };
+  const usable=(hit:THREE.Intersection)=>{
+    const material=hitMaterial(hit);
+    return material?.visible&&material.opacity>0;
+  };
+  return candidates.find(hit=>usable(hit)&&hitMaterial(hit).opacity>=.2)
+    ??candidates.find(usable)??annotationRaycaster.intersectObjects(shells,false).find(usable)??null;
+}
+
+function pickPartAtPoint(clientX:number,clientY:number):PartRecord|null{
+  const hit=spatialIntersectionAtPoint(clientX,clientY);
+  return hit?spatialOwner.get(hit.object)??null:null;
 }
 
 function selectPartAtPointer(event:PointerEvent):void{
@@ -3013,13 +3086,17 @@ loader.load(
       console.error(error);
     }
     majorPartGroups = buildMajorPartGroups();
+    initializeSpatialRegistry();
     refreshPartVisibility();
     byId('metric-triangles').textContent = formatNumber(triangleCount);
     renderPartList();
     sectionPlane.constant = -modelCenter.x;
     applyDisplayMode('xray');
     loadStoredAnnotations();
-    initializeSensors();
+    void initializeSensors().catch(error=>{console.error('Sensor anchor initialization failed',error);sensorStreamState.textContent='测点定位不可用';});
+    // Sensor targets enter the worker queue first. Prewarm visible source parts
+    // and procedural internals without blocking the render loop.
+    spatialIndex.warm(spatialMeshes.filter(mesh=>worldVisible(mesh)||!isWithinSelectedAssembly(mesh,modelRoot!)));
     setView('nacelle');
     // Always begin with the assembled turbine, including older bookmarked detail URLs.
     setPresentationMode('overview');updateSelectedUI();
@@ -3064,6 +3141,8 @@ loader.load(
       applyDisplayMode,
       majorPartGroups,
       pickPartAtPoint:(x:number,y:number)=>pickPartAtPoint(x,y)?.label??null,
+      inspectSpatialHit:(x:number,y:number,annotation=false)=>{const hit=spatialIntersectionAtPoint(x,y,annotation);return hit?{mesh:hit.object,instanceId:hit.instanceId,point:hit.point,binding:anchorRegistry?.bind(hit.object as THREE.Mesh,hit.instanceId)}:null;},
+      captureAnnotationViewpoint,
       getRelationshipState:()=>({selected:selectedPart?.label??null,mode:presentationMode,
         upstream:selectedRelationships?[...selectedRelationships.upstream.keys()]:[],downstream:selectedRelationships?[...selectedRelationships.downstream.keys()]:[],related:selectedRelationships?.related??[]}),
       getRenderDiagnostics: () => ({
@@ -3082,6 +3161,7 @@ loader.load(
         renderQuality: renderQuality.diagnostics(),
         navigationRendering,
         interactionLod: interactionLod?.diagnostics(),
+        spatialIndex:spatialIndex.diagnostics(),
         cameraWorld: camera.matrixWorld.toArray(),
         cameraProjection: camera.projectionMatrix.toArray(),
         orbitTarget:controls.target.toArray(),

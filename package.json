@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/part-relations.test.mjs tests/frame-assembly.test.mjs tests/source-assembly.test.mjs",
+    "prebuild": "node tools/update-model-identity.mjs",
+    "test": "node --test tests/part-relations.test.mjs tests/frame-assembly.test.mjs tests/source-assembly.test.mjs tests/spatial-anchors.test.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "three-mesh-bvh": "0.9.15"
   },
   "devDependencies": {
     "@gltf-transform/cli": "^4.4.2",
