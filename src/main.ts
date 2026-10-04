@@ -371,8 +371,9 @@ const annotationListCount = byId<HTMLElement>('annotation-list-count');
 const partsInspectorPanel = byId<HTMLElement>('parts-inspector-panel');
 const inspector = byId<HTMLElement>('inspector');
 const inspectorToggle = byId<HTMLButtonElement>('inspector-toggle');
-const compactViewport = window.matchMedia('(max-width: 900px), (max-width: 1100px) and (max-height: 600px), (pointer: coarse) and (max-width: 1400px)');
+const compactViewport = window.matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1400px)');
 let mobileInspectorOpen = false;
+let desktopUiScale = 1;
 const partsTab = byId<HTMLButtonElement>('parts-tab');
 const annotationsTab = byId<HTMLButtonElement>('annotations-tab');
 const sensorsTab = byId<HTMLButtonElement>('sensors-tab');
@@ -444,6 +445,7 @@ let viewportHeight = canvas.clientHeight;
 let overlayOffsetX=0,overlayOffsetY=0;
 const viewportObserver = new ResizeObserver(() => {
   viewportWidth = canvas.clientWidth; viewportHeight = canvas.clientHeight;
+  updateDesktopProportions();
   const canvasRect=canvas.getBoundingClientRect(),appRect=byId('app').getBoundingClientRect();
   overlayOffsetX=canvasRect.left-appRect.left;overlayOffsetY=canvasRect.top-appRect.top;
   invalidateStaticFrame();
@@ -1435,12 +1437,23 @@ function formatNumber(value: number): string {
 
 type PresentationFrame={left:number;top:number;width:number;height:number};
 
+function updateDesktopProportions():void{
+  const desktop=!compactViewport.matches;
+  // The accepted desktop composition is 1915 × 958 CSS pixels. Scale the UI
+  // with its available viewport, not the monitor DPR (which also includes zoom).
+  desktopUiScale=desktop?Math.max(.5,Math.min(1,canvas.clientWidth/1915,canvas.clientHeight/958)):1;
+  const app=byId('app');
+  app.classList.toggle('desktop-proportions',desktop);
+  app.style.setProperty('--desktop-ui-scale',String(desktopUiScale));
+  app.style.setProperty('--presentation-height',`${canvas.clientHeight/desktopUiScale}px`);
+}
+
 function presentationFrame():PresentationFrame{
   const canvasRect=canvas.getBoundingClientRect(),panel=inspector.getBoundingClientRect();
   const toolbar=document.querySelector<HTMLElement>('.viewer-toolbar')!.getBoundingClientRect();
-  const compact=compactViewport.matches,margin=compact?12:24,left=margin;
+  const compact=compactViewport.matches,margin=compact?12:24*desktopUiScale,left=margin;
   const top=compact?Math.max(inspectorToggle.getBoundingClientRect().bottom,document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect().bottom)-canvasRect.top+12:margin;
-  let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-20);
+  let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-(compact?20:20*desktopUiScale));
   if(!compact||mobileInspectorOpen){
     if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
     else bottom=Math.min(bottom,panel.top-canvasRect.top-margin);
@@ -1449,6 +1462,7 @@ function presentationFrame():PresentationFrame{
 }
 
 function setMobileInspectorOpen(open:boolean):void{
+  updateDesktopProportions();
   mobileInspectorOpen=open;
   inspector.dataset.mobileOpen=String(open);
   const collapsed=compactViewport.matches&&!open;

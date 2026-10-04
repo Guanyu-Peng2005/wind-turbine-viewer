@@ -26,8 +26,21 @@ html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
   :root { --inspector-readable-width:clamp(300px,23vw,334px); }
 }
 
+/* Preserve the reference composition on desktop displays with reduced CSS
+   viewports, including OS scaling. Touch layouts retain their 44px controls. */
+.desktop-proportions > .inspector,
+.desktop-proportions > .viewer-toolbar,
+.desktop-proportions > .transmission-control,
+.desktop-proportions > .generator-guide { zoom:var(--desktop-ui-scale,1); }
+.desktop-proportions > .inspector { width:334px; }
+.desktop-proportions > .viewer-toolbar { left:50%; width:452px; gap:5px; }
+.desktop-proportions .viewer-toolbar button { min-width:74px; padding:0 12px; font-size:14px; }
+.desktop-proportions .viewer-toolbar > i { margin:0 3px; }
+.desktop-proportions .inspector .part-relations { max-height:clamp(230px,calc(var(--presentation-height) - 470px),360px); }
+.desktop-proportions .inspector-tabs button { white-space:nowrap; }
+
 /* Portrait phones and tablets: an optional bottom sheet keeps the model clear. */
-@media (max-width:900px), (max-width:1100px) and (max-height:600px), (pointer:coarse) and (max-width:1400px) {
+@media (max-width:900px), (pointer:coarse) and (max-width:1400px) {
   .inspector-toggle {
     display:flex; align-items:center; justify-content:center;
     top:calc(10px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right));
@@ -53,7 +66,7 @@ html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
   .inspector {
     top:auto; left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right));
     bottom:calc(70px + env(safe-area-inset-bottom)); width:auto;
-    height:min(44dvh,380px); min-height:0; padding:10px; border-radius:8px;
+    height:min(30dvh,260px); min-height:0; padding:10px; border-radius:8px;
     background:rgba(9,23,31,.98); animation:none;
   }
   .inspector[data-mobile-open="false"] { display:none; }
@@ -98,10 +111,11 @@ html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
 }
 
 /* A short landscape viewport has more room for a side sheet than a bottom sheet. */
-@media (min-width:600px) and (max-width:1100px) and (max-height:600px), (min-width:901px) and (max-width:1400px) and (pointer:coarse) {
-  .inspector { top:calc(64px + env(safe-area-inset-top)); left:auto; width:280px; height:auto; }
+@media (min-width:600px) and (max-width:900px) and (max-height:600px), (min-width:901px) and (max-width:1400px) and (pointer:coarse) {
+  .inspector { top:calc(64px + env(safe-area-inset-top)); left:auto; width:clamp(240px,26vw,280px); height:auto; }
+  .inspector-tabs button { font-size:11px; white-space:nowrap; }
 }
-@media (min-width:600px) and (max-width:900px), (min-width:600px) and (max-width:1100px) and (max-height:600px), (min-width:600px) and (max-width:1400px) and (pointer:coarse) {
+@media (min-width:600px) and (max-width:900px), (min-width:600px) and (max-width:1400px) and (pointer:coarse) {
   .viewer-toolbar { left:50%; right:auto; width:560px; transform:translateX(-50%); }
   .viewer-toolbar button { font-size:13px; }
 }
