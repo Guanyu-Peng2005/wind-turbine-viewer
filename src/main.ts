@@ -2113,7 +2113,7 @@ function selectAnnotation(id: string, focus = false, edit = false): void {
     const owner=majorPartByLabel(annotation.partLabel);if(owner&&owner!==selectedPart)selectPart(owner,false,true);
   }
   if(focus&&annotation.binding&&annotation.binding.rootId!=='source'&&annotationMesh(annotation)){
-    setPresentationMode('drivetrain');applyDisplayMode(displayMode);
+    setPresentationMode('drivetrain');applyDisplayMode(displayMode);updateSelectedUI();
   }
   setAnnotationPanelOpen(true);
   activeAnnotationId = annotation.id;
