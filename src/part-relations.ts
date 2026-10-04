@@ -17,7 +17,7 @@ export const EQUIPMENT_RELATIONS:EquipmentRelation[]=[
   {from:'高速轴联轴器',to:'发电机',kind:'mechanical',label:'驱动发电机转子'},
   // Retain the user's requested presentation connection. The CAD identifies an
   // auxiliary transformer, so this edge is illustrative, not verified wiring.
-  {from:'发电机',to:'辅助变压器',kind:'electrical',label:'电气关系示意（沿用演示连接，不代表源 CAD 实际接线）',illustrative:true},
+  {from:'发电机',to:'辅助变压器',kind:'electrical',label:'电气关系示意（沿用演示连接，不代表源模型实际接线）',illustrative:true},
   {from:'主轴承',to:'主轴组件',kind:'support',label:'支撑主轴'},
   {from:'主机架',to:'主轴承',kind:'support',label:'承载轴承'},
   {from:'主机架',to:'齿轮箱',kind:'support',label:'支撑齿轮箱'},

@@ -2266,11 +2266,15 @@ function sensorStatusText(statusValue: SensorStatus): string {
 }
 
 function sensorQualityText(quality: SensorQuality): string {
-  return ({ good: 'Good', uncertain: 'Uncertain', bad: 'Bad' } as const)[quality];
+  return ({ good: '良好', uncertain: '存疑', bad: '无效' } as const)[quality];
 }
 
 function formatSensorValue(sensor: SensorRuntime): string {
   return sensor.value === null ? '—' : sensor.value.toFixed(sensor.precision);
+}
+
+function sensorUnitText(unit:string):string{
+  return ({'mm/s':'毫米/秒',bar:'巴'} as Record<string,string>)[unit]??unit;
 }
 
 function createDemoSensorAdapter(): SensorDataAdapter {
@@ -2445,17 +2449,17 @@ function drawSensorTrend(sensor: SensorRuntime): void {
 function renderSensorDetail(sensor: SensorRuntime): void {
   sensorDetail.hidden = false;
   sensorPanel.classList.add('detail-open');
-  sensorDetailId.textContent = sensor.id;
+  sensorDetailId.textContent = `测点 ${String(sensors.indexOf(sensor)+1).padStart(2,'0')}`;
   sensorDetailName.textContent = sensor.name;
   sensorDetailPart.textContent = `${sensor.partLabel} · ${sensor.anchorDescription}${worldVisible(sensor.mesh)?'':' · 开启传动透视查看'}`;
   sensorDetailValue.textContent = formatSensorValue(sensor);
-  sensorDetailUnit.textContent = sensor.unit;
+  sensorDetailUnit.textContent = sensorUnitText(sensor.unit);
   sensorDetailStatus.textContent = sensorStatusText(sensor.status);
   sensorDetailStatus.dataset.status = sensor.status;
   sensorDetailTime.textContent = sensor.sourceTimestamp ? new Date(sensor.sourceTimestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '—';
   sensorDetailQuality.textContent = sensorQualityText(sensor.quality);
-  sensorWarningThreshold.textContent = `${sensor.warning} ${sensor.unit}`;
-  sensorAlarmThreshold.textContent = `${sensor.alarm} ${sensor.unit}`;
+  sensorWarningThreshold.textContent = `${sensor.warning} ${sensorUnitText(sensor.unit)}`;
+  sensorAlarmThreshold.textContent = `${sensor.alarm} ${sensorUnitText(sensor.unit)}`;
   sensorCreateAnnotation.disabled = sensor.status === 'normal';
   drawSensorTrend(sensor);
 }
@@ -2475,13 +2479,13 @@ function renderSensorUi(): void {
       row.dataset.status = sensor.status;
       row.classList.toggle('active', sensor.id === selectedSensorId);
       row.querySelector('small')!.textContent = `${sensor.partLabel} · ${sensorStatusText(sensor.status)}`;
-      row.querySelector<HTMLElement>('.sensor-row-value')!.textContent = `${formatSensorValue(sensor)}${sensor.value === null ? '' : ` ${sensor.unit}`}`;
+      row.querySelector<HTMLElement>('.sensor-row-value')!.textContent = `${formatSensorValue(sensor)}${sensor.value === null ? '' : ` ${sensorUnitText(sensor.unit)}`}`;
     }
     const marker = sensorMarkerElements.get(sensor.id);
     if (marker) {
       marker.dataset.status = sensor.status;
       marker.classList.toggle('active', sensor.id === selectedSensorId);
-      marker.querySelector('small')!.textContent = `${formatSensorValue(sensor)}${sensor.value === null ? '' : ` ${sensor.unit}`}`;
+      marker.querySelector('small')!.textContent = `${formatSensorValue(sensor)}${sensor.value === null ? '' : ` ${sensorUnitText(sensor.unit)}`}`;
     }
   });
   sensorNormalCount.textContent = String(counts.normal);
@@ -2552,7 +2556,7 @@ function createAnnotationFromSensor(): void {
     localPosition: [...sensor.localPosition],
     localNormal: [...sensor.localNormal],
     title: `${sensor.name}${sensor.status === 'alarm' ? '报警' : '预警'}`,
-    description: `传感器 ${sensor.id} 当前值：${formatSensorValue(sensor)} ${sensor.unit}；数据质量：${sensorQualityText(sensor.quality)}；源时间：${sensor.sourceTimestamp}。`,
+    description: `${sensor.name}当前值：${formatSensorValue(sensor)} ${sensorUnitText(sensor.unit)}；数据质量：${sensorQualityText(sensor.quality)}；源时间：${new Date(sensor.sourceTimestamp).toLocaleString('zh-CN',{hour12:false})}。`,
     severity: sensor.status === 'alarm' ? '紧急' : '注意',
     status: '待处理',
     createdAt: new Date().toISOString(),
@@ -3093,7 +3097,7 @@ loader.load(
     sectionPlane.constant = -modelCenter.x;
     applyDisplayMode('xray');
     loadStoredAnnotations();
-    void initializeSensors().catch(error=>{console.error('Sensor anchor initialization failed',error);sensorStreamState.textContent='测点定位不可用';});
+    void initializeSensors().catch(error=>{console.error('测点定位初始化失败',error);sensorStreamState.textContent='测点定位不可用';});
     // Sensor targets enter the worker queue first. Prewarm visible source parts
     // and procedural internals without blocking the render loop.
     spatialIndex.warm(spatialMeshes.filter(mesh=>worldVisible(mesh)||!isWithinSelectedAssembly(mesh,modelRoot!)));
@@ -3173,13 +3177,13 @@ loader.load(
   (event) => {
     const progress = event.total ? Math.round((event.loaded / event.total) * 100) : 0;
     status.textContent = '加载模型…';
-    progressText.textContent = event.total ? `${progress}%` : `${(event.loaded / 1024 / 1024).toFixed(0)} MB`;
+    progressText.textContent = event.total ? `${progress}%` : `${(event.loaded / 1024 / 1024).toFixed(0)} 兆字节`;
     progressBar.style.width = `${Math.min(progress || 12, 96)}%`;
   },
   (error) => {
     console.error(error);
     status.textContent = '加载失败，请刷新重试';
-    progressText.textContent = 'ERROR';
+    progressText.textContent = '失败';
     statusStrip.querySelector('.status-dot')?.classList.add('error');
   },
 );

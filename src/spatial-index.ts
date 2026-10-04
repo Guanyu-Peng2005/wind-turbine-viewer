@@ -53,7 +53,7 @@ export class SpatialIndex{
           worker.postMessage({position,index,groups:geometry.groups},index?[position.buffer,index.buffer]:[position.buffer]);
         });
         this.built++;resolve(true);
-      }catch(error){this.failed++;console.warn('Spatial acceleration unavailable; using exact mesh queries.',error);resolve(false);}
+      }catch(error){this.failed++;console.warn('空间索引不可用，改用原始几何求交。',error);resolve(false);}
       // Yield between uploads so a queue of small geometries cannot monopolize UI work.
       await new Promise(resolve=>setTimeout(resolve,0));
     }
