@@ -14,6 +14,7 @@ import { frameAssemblyAttachments } from './frame-assembly';
 import { equipmentContext, type RelationRole } from './part-relations';
 import './style.css';
 import './presentation.css';
+import './responsive.css';
 
 type DisplayMode = 'solid' | 'xray' | 'section';
 type PartRole = 'shell' | 'auxiliary' | 'internal';
@@ -368,6 +369,10 @@ const annotationOverlay = byId<HTMLElement>('annotation-overlay');
 const annotationCount = byId<HTMLElement>('annotation-count');
 const annotationListCount = byId<HTMLElement>('annotation-list-count');
 const partsInspectorPanel = byId<HTMLElement>('parts-inspector-panel');
+const inspector = byId<HTMLElement>('inspector');
+const inspectorToggle = byId<HTMLButtonElement>('inspector-toggle');
+const compactViewport = window.matchMedia('(max-width: 900px), (max-width: 1100px) and (max-height: 600px), (pointer: coarse) and (max-width: 1400px)');
+let mobileInspectorOpen = false;
 const partsTab = byId<HTMLButtonElement>('parts-tab');
 const annotationsTab = byId<HTMLButtonElement>('annotations-tab');
 const sensorsTab = byId<HTMLButtonElement>('sensors-tab');
@@ -1431,13 +1436,34 @@ function formatNumber(value: number): string {
 type PresentationFrame={left:number;top:number;width:number;height:number};
 
 function presentationFrame():PresentationFrame{
-  const canvasRect=canvas.getBoundingClientRect(),panel=document.querySelector<HTMLElement>('.inspector')!.getBoundingClientRect();
+  const canvasRect=canvas.getBoundingClientRect(),panel=inspector.getBoundingClientRect();
   const toolbar=document.querySelector<HTMLElement>('.viewer-toolbar')!.getBoundingClientRect();
-  const margin=24,left=margin,top=margin;
+  const compact=compactViewport.matches,margin=compact?12:24,left=margin;
+  const top=compact?Math.max(inspectorToggle.getBoundingClientRect().bottom,document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect().bottom)-canvasRect.top+12:margin;
   let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-20);
-  if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
-  else bottom=Math.min(bottom,panel.top-canvasRect.top-margin);
-  return {left,top,width:Math.max(160,right-left),height:Math.max(160,bottom-top)};
+  if(!compact||mobileInspectorOpen){
+    if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
+    else bottom=Math.min(bottom,panel.top-canvasRect.top-margin);
+  }
+  return {left,top,width:Math.max(80,right-left),height:Math.max(80,bottom-top)};
+}
+
+function setMobileInspectorOpen(open:boolean):void{
+  mobileInspectorOpen=open;
+  inspector.dataset.mobileOpen=String(open);
+  const collapsed=compactViewport.matches&&!open;
+  inspector.inert=collapsed;
+  if(collapsed)inspector.setAttribute('aria-hidden','true');else inspector.removeAttribute('aria-hidden');
+  inspectorToggle.setAttribute('aria-expanded',String(!collapsed));
+  inspectorToggle.textContent=open?'收起面板':'零件面板';
+  if(collapsed&&inspector.contains(document.activeElement))inspectorToggle.focus({preventScroll:true});
+  requestAnimationFrame(()=>{
+    if(!modelRoot)return;
+    viewportWidth=canvas.clientWidth;viewportHeight=canvas.clientHeight;
+    if(homeFramingActive)fitHomeView();
+    else if(camera.view?.enabled||compactViewport.matches)applyPresentationOffset(presentationFrame());
+    invalidateStaticFrame();updateAnnotationOverlay();updateSensorOverlay();
+  });
 }
 
 function applyPresentationOffset(frame:PresentationFrame):void{
@@ -1662,7 +1688,7 @@ function fitPartWithRelations(part:PartRecord):void{
       else bounds.union(partBounds(neighbor));
     }
   }
-  fitBounds(bounds,new THREE.Vector3(1,.55,1.4),1.2,orbitCenter,part.label==='主机架'?presentationFrame():undefined);
+  fitBounds(bounds,new THREE.Vector3(1,.55,1.4),1.2,orbitCenter,part.label==='主机架'||compactViewport.matches?presentationFrame():undefined);
 }
 
 function selectPart(part: PartRecord | null, focus = false, activateFocus = false): void {
@@ -1812,7 +1838,7 @@ function setNavigationMode(mode: 'orbit' | 'pan', cancelAnnotation = true): void
   navigationPan.setAttribute('aria-pressed', String(mode === 'pan'));
   canvas.classList.toggle('navigation-pan', mode === 'pan');
   controls.enableRotate = mode === 'orbit';
-  controls.enablePan = mode === 'pan';
+  controls.enablePan = true;
   controls.enableZoom = true;
   controls.screenSpacePanning = true;
   controls.minPolarAngle = THREE.MathUtils.degToRad(1);
@@ -1820,6 +1846,8 @@ function setNavigationMode(mode: 'orbit' | 'pan', cancelAnnotation = true): void
   controls.mouseButtons.LEFT = mode === 'orbit' ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
   controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
   controls.mouseButtons.RIGHT = null;
+  controls.touches.ONE = mode === 'orbit' ? THREE.TOUCH.ROTATE : THREE.TOUCH.PAN;
+  controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
   controls.update();
   if (cancelAnnotation && annotationModeActive) setAnnotationMode(false);
 }
@@ -1835,7 +1863,8 @@ function setAnnotationMode(active: boolean): void {
   );
 }
 
-function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors'): void {
+function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors',reveal=true): void {
+  if(reveal&&compactViewport.matches&&!mobileInspectorOpen)setMobileInspectorOpen(true);
   const showParts = tab === 'parts';
   const showAnnotations = tab === 'annotations';
   const showSensors = tab === 'sensors';
@@ -1861,8 +1890,8 @@ function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors'): void {
   }
 }
 
-function setAnnotationPanelOpen(open: boolean): void {
-  setInspectorTab(open ? 'annotations' : 'parts');
+function setAnnotationPanelOpen(open: boolean,reveal=true): void {
+  setInspectorTab(open ? 'annotations' : 'parts',reveal);
 }
 
 function renderAnnotationMarkers(): void {
@@ -2590,6 +2619,9 @@ function setOrbitPivotFromPointer(event: MouseEvent): void {
 }
 
 search.addEventListener('input', () => renderPartList(search.value));
+inspectorToggle.addEventListener('click',()=>setMobileInspectorOpen(!mobileInspectorOpen));
+compactViewport.addEventListener('change',()=>setMobileInspectorOpen(mobileInspectorOpen));
+setMobileInspectorOpen(false);
 partsTab.addEventListener('click', () => setAnnotationPanelOpen(false));
 annotationsTab.addEventListener('click', () => setAnnotationPanelOpen(true));
 sensorsTab.addEventListener('click', () => setInspectorTab('sensors'));
@@ -2640,8 +2672,11 @@ annotationForm.addEventListener('submit', (event) => {
   setAnnotationTip('标注已保存。', true);
 });
 
+const modelPointerIds=new Set<number>();
 canvas.addEventListener('pointerdown', (event) => {
   if (event.button !== 0) return;
+  modelPointerIds.add(event.pointerId);
+  if(modelPointerIds.size>1){partPointerDragged=true;return;}
   partPointerDragged=false;
   annotationPointerStart = { x: event.clientX, y: event.clientY, button: event.button };
 });
@@ -2650,13 +2685,16 @@ canvas.addEventListener('pointermove',event=>{
   if(annotationPointerStart&&Math.hypot(event.clientX-annotationPointerStart.x,event.clientY-annotationPointerStart.y)>5)partPointerDragged=true;
 });
 canvas.addEventListener('pointerup', (event) => {
+  modelPointerIds.delete(event.pointerId);
   const start = annotationPointerStart;
   annotationPointerStart = null;
   if (!start || start.button !== 0 || event.button !== 0 || partPointerDragged) return;
   if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
   if(annotationModeActive)placeAnnotationAtPointer(event);else selectPartAtPointer(event);
 });
-canvas.addEventListener('pointercancel', () => { annotationPointerStart = null; });
+canvas.addEventListener('pointercancel',event=>{
+  modelPointerIds.delete(event.pointerId);annotationPointerStart=null;partPointerDragged=true;
+});
 canvas.addEventListener('dblclick', setOrbitPivotFromPointer);
 
 function pickPartAtPoint(clientX:number,clientY:number):PartRecord|null{
@@ -2736,7 +2774,8 @@ document.addEventListener('keydown', (event) => {
     closeAnnotationEditor(true);
     return;
   }
-  if (event.key === '/' && document.activeElement !== search) { event.preventDefault(); search.focus(); }
+  if (event.key === '/' && document.activeElement !== search) { event.preventDefault();if(compactViewport.matches)setMobileInspectorOpen(true);search.focus(); }
+  if(event.key==='Escape'&&compactViewport.matches&&mobileInspectorOpen){setMobileInspectorOpen(false);return;}
   if (event.key === 'Escape') { search.value = ''; search.blur(); clearPartFocus(); }
 });
 
@@ -2831,7 +2870,7 @@ for (const mode of ['cad', 'section'] as const) {
 function resetViewerView():void{
   restoreFullDetail();
   setNavigationMode('orbit', false);
-  setAnnotationPanelOpen(false);
+  setAnnotationPanelOpen(false,false);
   clearVisibilityFilters();
   search.value = '';
   explodeRange.value = '0';

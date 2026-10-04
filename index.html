@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#07151d" />
     <meta name="description" content="风机机舱内部传动链透视运动演示" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23007e8c'/%3E%3Ccircle cx='32' cy='32' r='5' fill='white'/%3E%3Cpath d='M30 27 31 8c8 0 12 5 8 12l-5 8M27 34 10 44c-4-7-1-13 7-13l10 1M37 35l17 10c-4 7-12 7-15 1l-5-9' fill='white'/%3E%3C/svg%3E" />
@@ -38,7 +38,8 @@
         </div>
       </section>
 
-      <aside class="inspector surface-panel" aria-label="主要零件树">
+      <button id="inspector-toggle" class="inspector-toggle surface-panel" type="button" aria-controls="inspector" aria-expanded="false">零件面板</button>
+      <aside id="inspector" class="inspector surface-panel" aria-label="主要零件树" data-mobile-open="false">
         <div class="inspector-tabs" role="tablist" aria-label="工程信息">
           <button id="parts-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="parts-inspector-panel">零件树</button>
           <button id="annotations-tab" type="button" role="tab" aria-selected="false" aria-controls="annotation-panel">标注记录 <b id="annotation-count">0</b></button>
