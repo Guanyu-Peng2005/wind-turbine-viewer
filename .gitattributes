@@ -1,0 +1,3 @@
+* text=auto
+*.glb binary
+*.wasm binary

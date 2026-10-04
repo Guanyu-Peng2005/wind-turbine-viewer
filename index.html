@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07151d" />
+    <meta name="description" content="风机机舱内部传动链透视运动演示" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23007e8c'/%3E%3Ccircle cx='32' cy='32' r='5' fill='white'/%3E%3Cpath d='M30 27 31 8c8 0 12 5 8 12l-5 8M27 34 10 44c-4-7-1-13 7-13l10 1M37 35l17 10c-4 7-12 7-15 1l-5-9' fill='white'/%3E%3C/svg%3E" />
+    <title>风机机舱 · 传动链透视演示</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewer" aria-label="风机三维模型查看器"></canvas>
+
+      <div class="annotation-overlay" id="annotation-overlay" aria-live="polite"></div>
+      <div class="sensor-overlay" id="sensor-overlay" aria-live="polite"></div>
+
+      <section class="status-strip surface-panel" aria-live="polite">
+        <div class="status-dot"></div>
+        <div>
+          <span id="load-status">加载模型…</span>
+          <strong id="load-progress">0%</strong>
+        </div>
+        <div class="progress-track"><span id="progress-bar"></span></div>
+      </section>
+      <section id="generator-guide" class="generator-guide surface-panel" hidden aria-label="发电机结构说明">
+        <h2 title="按典型双馈结构重建。">发电机</h2>
+        <div class="generator-view-switch" role="group" aria-label="发电机展示方式">
+          <button id="generator-section-mode" type="button" aria-pressed="true">整机透视</button>
+          <button id="generator-cad-mode" type="button" aria-pressed="false">外壳实显</button>
+        </div>
+        <div id="generator-section-notes">
+          <button id="generator-internal-detail" type="button">内部细节</button>
+          <div class="generator-detail-actions">
+            <button id="generator-bearing-detail" type="button">轴承细节</button>
+            <button id="generator-collector-detail" type="button">滑环与碳刷</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="inspector surface-panel" aria-label="主要零件树">
+        <div class="inspector-tabs" role="tablist" aria-label="工程信息">
+          <button id="parts-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="parts-inspector-panel">零件树</button>
+          <button id="annotations-tab" type="button" role="tab" aria-selected="false" aria-controls="annotation-panel">标注记录 <b id="annotation-count">0</b></button>
+          <button id="sensors-tab" type="button" role="tab" aria-selected="false" aria-controls="sensor-panel">实时监测 <b id="sensor-alarm-count" hidden>0</b></button>
+        </div>
+
+        <section class="inspector-tab-panel parts-inspector-panel" id="parts-inspector-panel" role="tabpanel" aria-labelledby="parts-tab">
+
+        <label class="search-box">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+          <input id="part-search" type="search" placeholder="搜索零件" aria-label="搜索零件" autocomplete="off" />
+        </label>
+
+        <div class="selected-card" id="selected-card" hidden>
+          <strong id="selected-name"></strong>
+          <button id="clear-part-focus" type="button" disabled>清除选择</button>
+        </div>
+
+        <div class="part-actions" role="group" aria-label="选中零件操作">
+          <button id="focus-selected" type="button" disabled>聚焦</button>
+          <button id="isolate-selected" type="button" disabled>独显</button>
+          <button id="hide-selected" type="button" disabled>隐藏</button>
+        </div>
+
+        <section id="part-relations-panel" class="part-relations" aria-label="零件上下游关系" hidden>
+          <header><h3>零件关系</h3></header>
+          <div class="relation-legend"><span class="current">当前</span><span class="upstream">上游</span><span class="downstream">下游</span><span class="related">支撑/辅助</span></div>
+          <div class="relation-columns">
+            <div class="upstream"><h4>上游</h4><div id="relationship-upstream"></div></div>
+            <div class="downstream"><h4>下游</h4><div id="relationship-downstream"></div></div>
+          </div>
+          <div class="relation-associated"><div id="relationship-related"></div></div>
+        </section>
+        <div class="part-results" id="part-results" role="listbox" aria-label="零件搜索结果">
+          <p class="empty-note">加载中…</p>
+        </div>
+        </section>
+
+        <section class="inspector-tab-panel annotation-panel" id="annotation-panel" role="tabpanel" aria-labelledby="annotations-tab" hidden>
+          <header class="annotation-head">
+            <div>
+              <h2>标注</h2>
+            </div>
+            <button id="annotation-close" type="button">返回零件</button>
+          </header>
+
+          <button class="annotation-mode" id="annotation-mode" type="button" aria-pressed="false" title="开启后，点击模型表面放置标注。">
+            <span class="annotation-mode-dot"></span>
+            <span><b>添加标注</b></span>
+          </button>
+          <p class="annotation-tip" id="annotation-tip" role="status" hidden></p>
+
+          <div class="annotation-list-head"><span title="单击定位，双击编辑。">标注记录</span><b id="annotation-list-count">0 项</b></div>
+          <div class="annotation-list" id="annotation-list">
+            <p class="annotation-empty">暂无标注</p>
+          </div>
+
+          <form class="annotation-form" id="annotation-form" hidden>
+            <div class="annotation-form-title">
+              <span id="annotation-form-index">01</span>
+              <div><small>关联零件</small><strong id="annotation-part-name">—</strong></div>
+            </div>
+            <label>
+              <span>标注标题</span>
+              <input id="annotation-title" maxlength="48" required placeholder="例如：主轴承温度测点" />
+            </label>
+            <div class="annotation-form-grid">
+              <label>
+                <span>严重等级</span>
+                <select id="annotation-severity">
+                  <option value="一般">一般</option>
+                  <option value="注意">注意</option>
+                  <option value="重要">重要</option>
+                  <option value="紧急">紧急</option>
+                </select>
+              </label>
+              <label>
+                <span>处理状态</span>
+                <select id="annotation-status">
+                  <option value="待处理">待处理</option>
+                  <option value="处理中">处理中</option>
+                  <option value="已完成">已完成</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>工程说明</span>
+              <textarea id="annotation-description" maxlength="240" rows="3" placeholder="记录缺陷、检修要求或测点说明"></textarea>
+            </label>
+            <div class="annotation-form-actions">
+              <button id="annotation-delete" class="danger" type="button">删除</button>
+              <span></span>
+              <button id="annotation-cancel" type="button">取消</button>
+              <button class="primary" type="submit">保存标注</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="inspector-tab-panel sensor-panel" id="sensor-panel" role="tabpanel" aria-labelledby="sensors-tab" hidden>
+          <header class="sensor-head">
+            <div>
+              <h2>设备监测</h2>
+            </div>
+            <span class="simulation-badge">模拟数据</span>
+          </header>
+
+          <div class="sensor-summary" aria-label="监测状态汇总">
+            <span><i class="normal"></i><b id="sensor-normal-count">0</b><small>正常</small></span>
+            <span><i class="warning"></i><b id="sensor-warning-count">0</b><small>预警</small></span>
+            <span><i class="alarm"></i><b id="sensor-critical-count">0</b><small>报警</small></span>
+            <span><i class="offline"></i><b id="sensor-offline-count">0</b><small>离线</small></span>
+          </div>
+
+          <div class="sensor-list-head"><span>传感器</span><b id="sensor-stream-state">已连接</b></div>
+          <div class="sensor-list" id="sensor-list">
+            <p class="sensor-empty">加载中…</p>
+          </div>
+
+          <section class="sensor-detail" id="sensor-detail" hidden>
+            <div class="sensor-detail-head">
+              <span id="sensor-detail-id">—</span>
+              <button id="sensor-detail-close" type="button" aria-label="返回传感器列表">← 返回列表</button>
+            </div>
+            <h3 id="sensor-detail-name">选择一个传感器</h3>
+            <p id="sensor-detail-part">—</p>
+            <div class="sensor-current"><strong id="sensor-detail-value">—</strong><span id="sensor-detail-unit"></span><b id="sensor-detail-status">—</b></div>
+            <div class="sensor-quality"><span>源时间 <b id="sensor-detail-time">—</b></span><span>数据质量 <b id="sensor-detail-quality">—</b></span></div>
+            <canvas id="sensor-trend" width="520" height="150" aria-label="最近一分钟趋势"></canvas>
+            <div class="sensor-thresholds"><span>预警 <b id="sensor-warning-threshold">—</b></span><span>报警 <b id="sensor-alarm-threshold">—</b></span></div>
+            <button id="sensor-create-annotation" type="button">转为人工标注</button>
+          </section>
+        </section>
+      </aside>
+
+      <nav class="viewer-toolbar surface-panel" aria-label="三维导航工具">
+        <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><span>旋转</span></button>
+        <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><span>平移</span></button>
+        <i aria-hidden="true"></i>
+        <button id="navigation-reset" type="button" title="复位视角（R）"><span>复位视角</span></button>
+        <i aria-hidden="true"></i>
+        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" title="报警点位（M）"><span>报警点位</span></button>
+        <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注（A）"><span>添加标注</span></button>
+      </nav>
+
+      <nav class="view-dock surface-panel" aria-label="相机视图" hidden>
+        <button class="view-button active" data-view="overview" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7 12 3l8 4-8 4-8-4Z"></path><path d="m4 12 8 4 8-4M4 17l8 4 8-4"></path></svg>
+          <span>整体</span>
+        </button>
+        <button class="view-button" data-view="nacelle" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="2"></rect><path d="M8 7V4m8 3V4M7 17v3m10-3v3"></path></svg>
+          <span>机舱</span>
+        </button>
+        <button class="view-button" data-view="rotor" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.2"></circle><path d="M12 9.8V3c3 0 4.4 2.3 3.2 4.5L13.7 10M10.1 13.1 4.2 16.5c-1.5-2.6-.2-5 2.3-5l3.8.1M13.9 13.1l5.9 3.4c-1.5 2.6-4.2 2.7-5.5.5l-1.9-3.2"></path></svg>
+          <span>轮毂</span>
+        </button>
+        <button class="view-button" data-view="selected" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M8 21H3v-5m13 5h5v-5"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <span>零件</span>
+        </button>
+      </nav>
+
+      <div hidden>
+        <div class="mode-tabs" role="group" aria-label="显示模式" hidden>
+          <button class="mode-button active" data-mode="solid" type="button">实体</button>
+          <button class="mode-button" data-mode="xray" type="button">透视</button>
+          <button class="mode-button" data-mode="section" type="button">剖切</button>
+        </div>
+
+        <label class="xray-filter" id="xray-filter" hidden>
+          <input id="hide-auxiliary" type="checkbox" checked />
+          <span>隐藏附着件与小架</span>
+        </label>
+
+        <label class="range-control" hidden>
+          <span><b>爆炸展开</b><output id="explode-value">0%</output></span>
+          <input id="explode-range" type="range" min="0" max="100" value="0" />
+        </label>
+
+        <label class="range-control section-control" id="section-control" hidden>
+          <span><b>剖切位置</b><output id="section-value">50%</output></span>
+          <input id="section-range" type="range" min="0" max="100" value="50" />
+        </label>
+
+
+      </div>
+
+      <section class="control-deck transmission-control surface-panel" aria-label="传动结构展示">
+        <label class="transmission-toggle" title="内部为典型传动结构示意，未经厂家参数验证。"><input id="show-internals" type="checkbox" disabled /><span>传动结构透视</span></label>
+      </section>
+
+      <footer class="telemetry surface-panel">
+        <span><i>UNIT</i><b>m</b></span>
+        <span><i>PARTS</i><b id="metric-parts">—</b></span>
+        <span><i>TRIANGLES</i><b id="metric-triangles">—</b></span>
+        <span><i>FPS</i><b id="metric-fps">—</b></span>
+      </footer>
+
+      <div class="interaction-hint" id="interaction-hint" hidden>
+        <span class="mouse-glyph" aria-hidden="true"></span>
+        左键旋转 · 滚轮缩放 · 右键平移 · 点击选择零件
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

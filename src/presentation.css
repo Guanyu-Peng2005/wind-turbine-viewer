@@ -1,0 +1,194 @@
+/* Original colours live in style.css. Retain later controls and readable guide. */
+.inspector .part-row { opacity: 1; animation: none; }
+.generator-guide { left: 20px; top: 20px; width: 370px; padding: 16px 18px; background: rgba(9,23,31,.94); color: #dce6eb; border-color: rgba(198,208,211,.16); border-radius: 7px; }
+.generator-guide h2 { margin: 7px 0 15px; color: #dce6eb; font-size: 16px; }
+.generator-guide .eyebrow { color: #7fa3c5; font-size: 9px; }
+.generator-guide p:not(.eyebrow) { display: grid; grid-template-columns: 10px 1fr; gap: 3px 9px; margin: 11px 0; }
+.generator-guide i { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; }
+.generator-guide i.stator { background: #7096ce; }
+.generator-guide i.coil { background: #f0bf18; }
+.generator-guide i.rotor { background: #c6d0d3; border: 1px solid #82969d; }
+.generator-guide b { color: #d4e0e7; font-size: 11px; }
+.generator-guide span { grid-column: 2; color: #91a7b5; font-size: 10px; }
+.generator-guide small { display: block; margin-top: 13px; color: #7e9baa; font-size: 9px; line-height: 1.6; }
+.generator-view-switch { display: flex; gap: 5px; padding: 4px; margin-bottom: 17px; border: 1px solid #344550; border-radius: 5px; }
+.generator-view-switch button { flex: 1; padding: 9px 3px; background: transparent; border: 0; border-radius: 3px; color: #9cafbd; font: inherit; font-size: 11px; cursor: pointer; }
+.generator-view-switch button[aria-pressed="true"] { color: #ecf2f6; background: #35495e; box-shadow: inset 0 -2px #92b0d5; }
+.generator-view-switch button:focus-visible { outline: 2px solid #f0bf18; outline-offset: 2px; }
+#generator-internal-detail { width: 100%; margin-top: 8px; padding: 9px 12px; border: 1px solid #4e6376; border-radius: 4px; background: #263b4d; color: #e4edf4; cursor: pointer; }
+#generator-internal-detail:hover { background: #334c62; }
+#generator-internal-detail:focus-visible { outline: 2px solid #f0bf18; outline-offset: 2px; }
+.generator-detail-actions { display: flex; gap: 7px; margin-top: 7px; }
+.generator-detail-actions button { flex: 1; padding: 7px; border: 1px solid #3b5366; background: #182b3a; color: #cad8e2; border-radius: 4px; cursor: pointer; }
+.generator-detail-actions button:hover { background: #2a4358; }
+.generator-detail-actions button:focus-visible { outline: 2px solid #f0bf18; outline-offset: 2px; }
+/* Avoid recomputing large blurred backdrops over every animated 3D frame. */
+.rendering-active .surface-panel,
+.rendering-active .annotation-panel { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.rendering-active .generator-guide,
+.rendering-active .inspector { background: rgba(9, 23, 31, .96); }
+.control-deck.transmission-control { left:20px; right:auto; bottom:82px; transform:none; width:fit-content; min-width:0; min-height:0; padding:0; display:block; border-radius:7px; background:rgba(9,23,31,.96); color:#e5edf2; }
+.transmission-toggle { display:flex; align-items:center; gap:12px; min-height:54px; padding:12px 18px; font-size:16px; font-weight:500; cursor:pointer; user-select:none; }
+.transmission-toggle input { width:20px; height:20px; margin:0; accent-color:#d4b369; cursor:pointer; }
+.transmission-toggle input:focus-visible { outline:2px solid #e6c571; outline-offset:4px; }
+.transmission-toggle:has(input:checked) { color:#edcf89; }
+.transmission-toggle:has(input:disabled) { opacity:.55; cursor:wait; }
+.part-relations { flex:0 0 auto; margin-top:12px; padding:10px; border:1px solid #304652; border-radius:5px; background:rgba(5,17,25,.65); max-height:310px; overflow:auto; scrollbar-width:thin; }
+.part-relations header { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.part-relations h3 { margin:0; font-size:11px; color:#dbe5eb; }
+.part-relations header span { color:#e4c47e; font-size:10px; }
+.relation-legend { display:flex; gap:9px; margin:9px 0 7px; font-size:8px; }
+.relation-legend .current { color:#e5ecee; }.relation-legend .upstream { color:#bccb91; }.relation-legend .downstream { color:#cfb274; }
+.relation-legend .related { color:#cdb5df; }
+.relation-columns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.part-relations h4 { margin:5px 0; color:#94a9b8; font-size:9px; font-weight:500; }
+.relation-columns .upstream h4 { color:#bccb91; }.relation-columns .downstream h4 { color:#cfb274; }
+.relation-columns button { display:block; width:100%; text-align:left; }
+.part-relations button { min-height:25px; margin:3px 0; padding:4px 6px; border:1px solid #3a5060; border-radius:3px; color:#c8d8e5; background:#1b3040; font-size:10px; cursor:pointer; }
+.relation-columns .downstream button { color:#dfc793; background:#302d24; border-color:#625439; }
+.relation-columns .upstream button { color:#c7d3a0; background:#27311f; border-color:#63723f; }
+.part-relations button:hover { filter:brightness(1.2); }.part-relations button:focus-visible { outline:2px solid #e4c47e; outline-offset:2px; }
+.part-relations small { font-size:9px; color:#738a99; }
+.relation-associated { margin-top:7px; border-top:1px solid #263e4c; padding-top:3px; }
+.relation-associated button { margin-right:5px; color:#acbdc8; font-size:9px; }
+.inspector .relation-associated h4 { color:#cdb5df; }
+.inspector .relation-associated button { color:#dbc5e7; background:#302638; border-color:#6c547e; }
+.relation-direction-group { display:grid; grid-template-columns:72px minmax(0,1fr); gap:6px; align-items:start; padding:3px 0; }
+.inspector .relation-direction-group h4 { margin:8px 0; }
+.relation-note { display:block; margin-top:6px; }
+
+/* Readable review rail at normal browser zoom. Keep names prominent and give
+   the enlarged tree its own scroll area instead of shrinking the text. */
+.inspector h2 { font-size:22px; line-height:1.3; }
+.inspector .eyebrow { font-size:11px; }
+.inspector .part-count { font-size:12px; padding:6px 9px; }
+.inspector-tabs button { min-height:39px; height:auto; padding:7px 3px; font-size:13px; color:#b5c7d2; }
+.inspector-tabs button b { min-width:19px; height:19px; font-size:10px; }
+.inspector .search-box { height:44px; flex-shrink:0; }
+.inspector .search-box input { font-size:14px; }
+.inspector .search-box input::placeholder { color:#a8bbc6; }
+.inspector .selected-card { flex-shrink:0; }
+.inspector .selected-card strong { font-size:17px; line-height:1.45; }
+.inspector .selected-card span,.inspector .selected-card small { font-size:12px; line-height:1.6; color:#b3c4ce; }
+.inspector .selected-index { font-size:13px; }
+#clear-part-focus { height:34px; font-size:13px; }
+.inspector .parts-inspector-panel { overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; scrollbar-width:thin; }
+.inspector .part-results { min-height:180px; }
+.inspector .tree-group { padding:13px 0 6px; }
+.inspector .tree-group-label { font-size:14px; line-height:1.5; letter-spacing:.03em; color:#d0dde5; margin-bottom:6px; }
+.inspector .tree-group-label span { font-size:11px; color:#99b9dc; }
+.inspector .part-row { min-height:48px; padding:10px 5px 10px 0; grid-template-columns:28px minmax(0,1fr) 20px; }
+.inspector .part-row > span:nth-child(2) { min-width:0; }
+.inspector .part-row strong { font-size:16px; line-height:1.5; color:#edf4f7; }
+.inspector .part-row small { max-width:none; font-size:12px; line-height:1.5; margin-top:3px; color:#b0c1cb; }
+.inspector .tree-node::before { left:14px; }
+.inspector .tree-node i { width:9px; height:9px; }
+.inspector .visibility { font-size:12px; color:#9fb2bf; }
+.inspector .empty-note { font-size:14px; color:#b0c1cb; }
+.inspector .part-relations h3 { font-size:14px; }
+.inspector .part-relations { display:flex; flex-direction:column; max-height:clamp(230px,calc(100vh - 470px),360px); overflow:hidden; }
+.inspector .part-relations > header,.inspector .part-relations > .relation-legend { flex-shrink:0; }
+.inspector .part-relations > .relation-columns { flex:1 1 auto; min-height:48px; overflow-y:auto; scrollbar-width:thin; }
+.inspector .part-relations > .relation-associated { flex:0 1 auto; min-height:0; overflow-y:auto; scrollbar-width:thin; }
+.inspector .relation-columns button { display:flex; align-items:center; justify-content:space-between; gap:4px; }
+.inspector .part-relations .relation-path-badge { flex-shrink:0; font-size:11px; color:inherit; opacity:.85; }
+.inspector .part-relations header span { font-size:13px; }
+.inspector .relation-legend { font-size:11px; gap:8px; flex-wrap:wrap; line-height:1.6; }
+.inspector .part-relations h4 { font-size:12px; line-height:1.5; }
+.inspector .part-relations button { min-height:32px; font-size:13px; line-height:1.45; }
+.inspector .part-relations small { font-size:11px; line-height:1.6; color:#a8bcc9; }
+.inspector .relation-associated button { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
+@media (min-width:761px) {
+  :root { --inspector-readable-width:clamp(320px,25vw,360px); }
+  .inspector { width:var(--inspector-readable-width); }
+}
+/* Keep the presentation focused on the model and its controls. */
+.inspector-tabs { margin-top:0; }
+.inspector .selected-card { grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:10px 12px; }
+#clear-part-focus { grid-column:auto; margin-top:0; padding:0 10px; }
+.relation-legend span { display:inline-flex; align-items:center; gap:5px; }
+.relation-legend span::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+.annotation-mode { grid-template-columns:18px 1fr; min-height:44px; }
+.annotation-tip { min-height:0; font-size:12px; }
+.generator-guide h2 { margin:0 0 12px; }
+.generator-view-switch { margin-bottom:0; }
+.generator-view-switch button { font-size:13px; }
+
+/* Annotation and monitoring use the same readable type scale as the parts tree. */
+.inspector .annotation-panel { overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.inspector .annotation-panel > :not(.annotation-list) { flex-shrink:0; }
+.inspector .annotation-head h2,.inspector .sensor-head h2 { font-size:20px; line-height:1.4; }
+.inspector .annotation-head { align-items:center; }
+.inspector .annotation-head > button { height:36px; padding:0 10px; font-size:14px; color:#c6d5df; }
+.inspector .annotation-mode { min-height:46px; }
+.inspector .annotation-mode b { font-size:16px; }
+.inspector .annotation-tip { font-size:14px; line-height:1.6; }
+.inspector .annotation-list-head,.inspector .sensor-list-head { font-size:14px; line-height:1.5; color:#c0d0db; }
+.inspector .annotation-list-head b,.inspector .sensor-list-head b { font-size:13px; }
+.inspector .annotation-empty,.inspector .sensor-empty { font-size:14px; color:#b0c1cb; }
+.inspector .annotation-list { min-height:96px; flex-shrink:0; }
+.inspector .annotation-row { min-height:68px; padding:10px 4px; gap:8px; grid-template-columns:32px minmax(0,1fr) auto; }
+.inspector .annotation-row-index { width:28px; height:28px; font-size:12px; }
+.inspector .annotation-row strong { font-size:16px; line-height:1.45; white-space:normal; overflow-wrap:anywhere; }
+.inspector .annotation-row small { max-width:none; font-size:13px; line-height:1.5; color:#b0c1cb; white-space:normal; }
+.inspector .annotation-severity { padding:4px 6px; font-size:12px; }
+.inspector .annotation-form { max-height:none; overflow:visible; padding:12px; margin-bottom:12px; }
+.inspector .annotation-form-title > span { font-size:12px; }
+.inspector .annotation-form-title small { font-size:13px; color:#b0c1cb; }
+.inspector .annotation-form-title strong { font-size:16px; line-height:1.45; white-space:normal; }
+.inspector .annotation-form label > span { font-size:14px; color:#c0d0db; }
+.inspector .annotation-form input,.inspector .annotation-form select,.inspector .annotation-form textarea { font-size:16px; }
+.inspector .annotation-form input,.inspector .annotation-form select { height:42px; }
+.inspector .annotation-form textarea { min-height:96px; line-height:1.6; }
+.inspector .annotation-form input::placeholder,.inspector .annotation-form textarea::placeholder { color:#91a7b5; }
+.inspector .annotation-form-actions { grid-template-columns:auto 1fr auto auto; gap:6px; }
+.inspector .annotation-form-actions button { min-width:0; height:38px; padding:0 8px; font-size:14px; }
+.inspector .sensor-head,.inspector .sensor-summary,.inspector .sensor-list-head { flex-shrink:0; }
+.inspector .simulation-badge { font-size:12px; line-height:1.5; color:#c0d0db; }
+.inspector .sensor-summary > span { min-height:70px; padding:10px 6px 9px 13px; }
+.inspector .sensor-summary b { font-size:24px; }
+.inspector .sensor-summary small { font-size:13px; color:#b0c1cb; }
+.inspector .sensor-summary i { top:13px; width:5px; height:5px; }
+.inspector .sensor-row { min-height:76px; grid-template-columns:9px minmax(0,1fr) auto; gap:8px; padding:12px 4px; }
+.inspector .sensor-row strong { font-size:16px; line-height:1.45; white-space:normal; overflow-wrap:anywhere; }
+.inspector .sensor-row small { max-width:none; font-size:13px; line-height:1.5; color:#b0c1cb; white-space:normal; }
+.inspector .sensor-row-value { font-size:16px; white-space:nowrap; }
+.inspector .sensor-detail-head > span { font-size:13px; }
+.inspector .sensor-detail-head button { height:36px; padding:0 10px; font-size:14px; color:#c0d0db; }
+.inspector .sensor-detail h3 { margin-top:12px; font-size:20px; line-height:1.45; }
+.inspector .sensor-detail > p { margin-top:6px; font-size:14px; color:#b0c1cb; }
+.inspector .sensor-current { margin-top:18px; flex-wrap:wrap; gap:8px; }
+.inspector .sensor-current strong { font-size:38px; }
+.inspector .sensor-current span { font-size:16px; color:#b0c1cb; }
+.inspector .sensor-current b { font-size:14px; }
+.inspector .sensor-quality { gap:12px; margin-top:18px; }
+.inspector .sensor-quality span { font-size:13px; line-height:1.6; color:#b0c1cb; }
+.inspector .sensor-quality b { font-size:15px; color:#d2dee5; }
+.inspector #sensor-trend { height:140px; margin-top:18px; }
+.inspector .sensor-thresholds { justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:10px; font-size:13px; color:#b0c1cb; }
+.inspector #sensor-create-annotation { height:42px; margin-top:20px; font-size:15px; }
+.annotation-pin { width:28px; height:28px; font-size:12px; }
+.annotation-pin-label { min-width:140px; max-width:250px; }
+.annotation-pin-label b { font-size:14px; }
+.annotation-pin-label small { max-width:230px; font-size:12px; color:#b0c1cb; }
+.sensor-pin { min-width:24px; height:24px; font-size:11px; }
+.sensor-pin-label { left:30px; min-width:140px; max-width:220px; }
+.sensor-pin-label b { font-size:13px; }
+.sensor-pin-label small { font-size:12px; color:#b0c1cb; }
+.viewer-toolbar { gap:5px; padding:6px; }
+.viewer-toolbar button { min-width:84px; height:48px; padding:0 16px; color:#c3d0d7; font-size:16px; font-weight:500; line-height:1.4; white-space:nowrap; }
+.viewer-toolbar button span { font-size:inherit; }
+.viewer-toolbar > i { height:28px; }
+@media (min-width:761px) and (max-width:1100px) {
+  .viewer-toolbar { left:calc((100% - var(--inspector-readable-width) - 18px)/2); gap:3px; }
+  .viewer-toolbar button { min-width:60px; padding:0 9px; font-size:15px; }
+  .viewer-toolbar > i { margin:0; }
+}
+@media (max-width:760px) {
+  .viewer-toolbar { gap:3px; }
+  .viewer-toolbar button { min-width:0; padding:0 7px; font-size:14px; white-space:normal; }
+  .viewer-toolbar > i { display:none; }
+}
+@media (max-width: 1100px) { .generator-guide { width: 315px; } }
+@media (max-width: 760px) { .generator-guide { display: none; } }
+@media (max-width: 760px) { .control-deck.transmission-control { left:10px; bottom:340px; } }
