@@ -13,7 +13,7 @@ import { RenderQuality } from './render-quality';
 import { frameAssemblyAttachments } from './frame-assembly';
 import { equipmentContext, type RelationRole } from './part-relations';
 import { SpatialIndex, surfaceAnchor, worldVisible } from './spatial-index';
-import { AnchorRegistry, anchorWorldPoint, pointWorldMatrix, finiteVector, validBinding, type AnchorBinding } from './spatial-anchors';
+import { AnchorRegistry, anchorWorldPoint, stationaryAnchorWorldPoint, pointWorldMatrix, finiteVector, validBinding, type AnchorBinding } from './spatial-anchors';
 import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
@@ -423,6 +423,9 @@ const sensorCreateAnnotation = byId<HTMLButtonElement>('sensor-create-annotation
 const sensorLayerToggle = byId<HTMLButtonElement>('sensor-layer-toggle');
 const alarmSource=byId<HTMLSelectElement>('alarm-source');
 const alarmSend=byId<HTMLButtonElement>('alarm-send');
+const pointAlarmConsole=byId<HTMLElement>('point-alarm-console');
+const pointAlarmSource=byId<HTMLSelectElement>('point-alarm-source');
+const pointAlarmSend=byId<HTMLButtonElement>('point-alarm-send');
 const alarmBanner=byId<HTMLElement>('alarm-banner');
 const alarmMute=byId<HTMLButtonElement>('alarm-mute');
 const demoAlarm=new DemoAlarmState();
@@ -441,6 +444,7 @@ const annotationMeshLookup = new Map<string, THREE.Mesh>();
 const annotationMarkerElements = new Map<string, HTMLButtonElement>();
 const sensorMarkerElements = new Map<string, HTMLButtonElement>();
 const sensorRowElements = new Map<string, HTMLButtonElement>();
+const sensorDisplayRestTransforms=new Map<THREE.Object3D,THREE.Matrix4>();
 const annotations: EngineeringAnnotation[] = [];
 const sensors: SensorRuntime[] = [];
 const LEGACY_ANNOTATION_STORAGE_KEY = 'wind-turbine-engineering-annotations-v1';
@@ -1484,6 +1488,7 @@ function presentationFrame():PresentationFrame{
   let top=compact?Math.max(inspectorToggle.getBoundingClientRect().bottom,document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect().bottom)-canvasRect.top+12:margin;
   if(!alarmBanner.hidden)top=Math.max(top,alarmBanner.getBoundingClientRect().bottom-canvasRect.top+margin);
   let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-(compact?20:20*desktopUiScale));
+  if(!pointAlarmConsole.hidden)bottom=Math.min(bottom,pointAlarmConsole.getBoundingClientRect().top-canvasRect.top-margin);
   if(!compact||mobileInspectorOpen){
     if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
     else bottom=Math.min(bottom,panel.top-canvasRect.top-margin);
@@ -1500,6 +1505,7 @@ function setMobileInspectorOpen(open:boolean):void{
   if(collapsed)inspector.setAttribute('aria-hidden','true');else inspector.removeAttribute('aria-hidden');
   inspectorToggle.setAttribute('aria-expanded',String(!collapsed));
   inspectorToggle.textContent=open?'收起面板':'零件面板';
+  updatePointAlarmConsole();
   if(collapsed&&inspector.contains(document.activeElement))inspectorToggle.focus({preventScroll:true});
   requestAnimationFrame(()=>{
     if(!modelRoot)return;
@@ -1604,6 +1610,9 @@ function findMotionRoots(pattern: RegExp): THREE.Object3D[] {
 function setupMotionLinks(): void {
   if (!modelRoot) return;
   drivetrain = new Drivetrain(modelRoot, scene, MOVING_LAYER,GENERATOR_GLASS_LAYER);
+  sensorDisplayRestTransforms.clear();
+  drivetrain.links.forEach(link=>link.bindings.forEach(binding=>sensorDisplayRestTransforms.set(binding.node,binding.restMatrix.clone())));
+  drivetrain.rotors.forEach(rotor=>sensorDisplayRestTransforms.set(rotor.pivot,rotor.pivot.matrix.clone()));
   drivetrain.links.forEach(link => link.nodes.forEach(node => node.traverse(object => {
     if (!(object as THREE.Mesh).isMesh) return;
     const mesh = object as THREE.Mesh;
@@ -2263,7 +2272,7 @@ function sensorAnchorSeed(geometry:THREE.BufferGeometry, anchor: [number, number
 }
 
 function sensorWorldPoint(sensor: SensorRuntime): THREE.Vector3 {
-  return anchorWorldPoint(sensor.mesh,sensor.localPosition,sensor.binding);
+  return stationaryAnchorWorldPoint(sensor.mesh,sensor.localPosition,sensorDisplayRestTransforms,sensor.binding);
 }
 
 function sensorStatus(value: number | null, quality: SensorQuality, warning: number, alarm: number): SensorStatus {
@@ -2529,10 +2538,15 @@ function renderDemoAlarm():void{
   byId('alarm-sound-state').textContent=state==='playing'?'提示音已开启':state==='starting'?'正在开启声音':state==='unavailable'?'当前浏览器声音不可用':state==='failed'?'音效加载失败，点击开启声音重试':state==='blocked'?'点击开启声音':'提示音已关闭';
 }
 
+function setDemoAlarmTarget(sensorId:string):void{
+  if(!sensors.some(sensor=>sensor.id===sensorId))return;
+  alarmSource.value=sensorId;pointAlarmSource.value=sensorId;
+}
+
 function triggerDemoAlarm(sensorId=alarmSource.value):boolean{
   const sensor=sensors.find(candidate=>candidate.id===sensorId);if(!sensor||!emitDemoSamples)return false;
   if(!demoAlarm.active)alarmPreviousLayer=sensorLayerVisible;
-  demoAlarm.raise(sensor);alarmSource.value=sensorId;
+  demoAlarm.raise(sensor);setDemoAlarmTarget(sensorId);
   // Start audio in the trusted click handler before any camera or geometry work.
   void alarmSound.start();
   emitDemoSamples();setSensorLayerVisible(true);renderSensorUi();
@@ -2575,7 +2589,11 @@ function updateSensorOverlay(): void {
     if(demoAlarm.active?.target.id===sensor.id){
       const x=(projected.x*.5+.5)*viewportWidth,y=(-projected.y*.5+.5)*viewportHeight,labelWidth=Math.min(200,viewportWidth-32);
       const shift=Math.max(labelWidth/2+12,Math.min(viewportWidth-labelWidth/2-12,x))-x;
-      marker.style.setProperty('--alarm-label-shift',`${shift}px`);marker.classList.toggle('label-above',y>viewportHeight-150);
+      const beside=viewportHeight<=600&&viewportWidth>=600;
+      marker.style.setProperty('--alarm-label-shift',`${shift}px`);
+      marker.classList.toggle('label-above',!beside&&y>viewportHeight-150);
+      marker.classList.toggle('label-side',beside);
+      marker.classList.toggle('label-left',beside&&x+labelWidth+56>viewportWidth-12);
     }
     if (marker.style.left !== left) marker.style.left = left;
     if (marker.style.top !== top) marker.style.top = top;
@@ -2586,15 +2604,31 @@ function selectSensor(id: string, focus = false): void {
   const sensor = sensors.find((candidate) => candidate.id === id);
   if (!sensor) return;
   selectedSensorId = id;
+  setDemoAlarmTarget(id);
   setInspectorTab('sensors');
   if (focus) selectPart(sensor.part, true, true);
   renderSensorUi();
+}
+
+function updatePointAlarmConsole():void{
+  pointAlarmConsole.hidden=!sensorLayerVisible||(compactViewport.matches&&mobileInspectorOpen);
+  sensorLayerToggle.setAttribute('aria-expanded',String(!pointAlarmConsole.hidden));
+  if(pointAlarmConsole.hidden&&pointAlarmConsole.contains(document.activeElement))sensorLayerToggle.focus({preventScroll:true});
+}
+
+function toggleAlarmPoints():void{
+  const visible=!sensorLayerVisible||(compactViewport.matches&&mobileInspectorOpen);
+  if(visible&&compactViewport.matches)setMobileInspectorOpen(false);
+  setSensorLayerVisible(visible);
 }
 
 function setSensorLayerVisible(visible: boolean): void {
   sensorLayerVisible = visible;
   sensorLayerToggle.classList.toggle('active', visible);
   sensorLayerToggle.setAttribute('aria-pressed', String(visible));
+  updatePointAlarmConsole();
+  if(modelRoot&&camera.view?.enabled)applyPresentationOffset(presentationFrame());
+  invalidateStaticFrame();
   updateSensorAlarmBadge();
   updateSensorOverlay();
 }
@@ -2666,9 +2700,13 @@ async function initializeSensors(): Promise<void> {
     };
   }));
   sensors.push(...prepared.filter((sensor):sensor is SensorRuntime=>sensor!==null));
-  alarmSource.replaceChildren();
-  for(const sensor of sensors){const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;alarmSource.append(option);}
-  alarmSource.value='WT01-GB-V01';alarmSource.disabled=false;alarmSend.disabled=false;
+  for(const select of[alarmSource,pointAlarmSource]){
+    select.replaceChildren();
+    for(const sensor of sensors){const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;select.append(option);}
+    select.disabled=sensors.length===0;
+  }
+  setDemoAlarmTarget(sensors.find(sensor=>sensor.id==='WT01-GB-V01')?.id??sensors[0]?.id??'');
+  alarmSend.disabled=pointAlarmSend.disabled=sensors.length===0;
   alarmSound.preload();
   renderSensorUi();
   stopSensorStream = createDemoSensorAdapter().start(applySensorValue);
@@ -2771,8 +2809,14 @@ annotationModeButton.addEventListener('click', () => {
 navigationOrbit.addEventListener('click', () => setNavigationMode('orbit'));
 navigationPan.addEventListener('click', () => setNavigationMode('pan'));
 navigationReset.addEventListener('click', resetViewerView);
-sensorLayerToggle.addEventListener('click', () => setSensorLayerVisible(!sensorLayerVisible));
+sensorLayerToggle.addEventListener('click',toggleAlarmPoints);
 alarmSend.addEventListener('click',()=>triggerDemoAlarm());
+pointAlarmSend.addEventListener('click',()=>triggerDemoAlarm(pointAlarmSource.value));
+alarmSource.addEventListener('change',()=>setDemoAlarmTarget(alarmSource.value));
+pointAlarmSource.addEventListener('change',()=>setDemoAlarmTarget(pointAlarmSource.value));
+pointAlarmConsole.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.stopPropagation();setSensorLayerVisible(false);sensorLayerToggle.focus({preventScroll:true});}
+});
 byId('sensor-send-alarm').addEventListener('click',()=>{if(selectedSensorId)triggerDemoAlarm(selectedSensorId);});
 byId('alarm-clear').addEventListener('click',clearDemoAlarm);
 alarmMute.addEventListener('click',()=>{
@@ -2928,7 +2972,7 @@ document.addEventListener('keydown', (event) => {
   }
   if (event.key.toLowerCase() === 'm' && !editing) {
     event.preventDefault();
-    setSensorLayerVisible(!sensorLayerVisible);
+    toggleAlarmPoints();
     return;
   }
   if (event.key === 'Escape' && (annotationModeActive || !annotationForm.hidden)) {

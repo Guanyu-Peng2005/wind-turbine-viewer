@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
-import { AnchorRegistry,anchorWorldPoint,pointWorldMatrix,finiteVector,validBinding } from '../src/spatial-anchors.ts';
+import { AnchorRegistry,anchorWorldPoint,stationaryAnchorWorldPoint,pointWorldMatrix,finiteVector,validBinding } from '../src/spatial-anchors.ts';
 import { surfaceAnchor,worldVisible } from '../src/spatial-index.ts';
 
 test('stable anchors survive unrelated sibling insertion but reject a different model revision',()=>{
@@ -56,4 +56,34 @@ test('accelerated raycasting preserves instance ids and exact hit positions',()=
   mesh.setMatrixAt(0,new THREE.Matrix4().makeTranslation(0,0,0));mesh.setMatrixAt(1,new THREE.Matrix4().makeTranslation(3,0,0));mesh.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(new THREE.Vector3(3,0,4),new THREE.Vector3(0,0,-1)),hit=ray.intersectObject(mesh)[0];
   assert.equal(hit.instanceId,1);assert.ok(hit.point.distanceTo(new THREE.Vector3(3,0,.5))<1e-7);
+});
+
+test('监测标牌不随轴自转，真实表面测点仍跟随旋转',()=>{
+  const assembly=new THREE.Group(),shaft=new THREE.Group(),mesh=new THREE.Mesh(new THREE.CylinderGeometry());
+  assembly.position.set(3,2,1);assembly.rotation.z=.4;assembly.scale.set(1.2,.8,2);
+  assembly.add(shaft);shaft.position.x=4;shaft.add(mesh);assembly.updateMatrixWorld(true);
+  const rest=new Map([[shaft,shaft.matrix.clone()]]),local=[0,1,.5];
+  const initial=stationaryAnchorWorldPoint(mesh,local,rest),physical=anchorWorldPoint(mesh,local);
+  for(const angle of[.4,1.5,2.7,5.4]){
+    shaft.rotation.x=angle;
+    assert.ok(stationaryAnchorWorldPoint(mesh,local,rest).distanceTo(initial)<1e-12);
+    assert.ok(anchorWorldPoint(mesh,local).distanceTo(physical)>.1);
+  }
+  assembly.position.x+=2;assembly.rotation.y=.7;
+  const moved=stationaryAnchorWorldPoint(mesh,local,rest);
+  const expected=new THREE.Vector3(...local).applyMatrix4(rest.get(shaft)).applyMatrix4(assembly.matrixWorld);
+  assert.ok(moved.distanceTo(initial)>1);assert.ok(moved.distanceTo(expected)<1e-12);
+});
+
+test('标牌保留嵌套参考姿态、实例位置和源模型的剪切变换',()=>{
+  const root=new THREE.Group(),carrier=new THREE.Group(),planet=new THREE.Group();
+  root.matrixAutoUpdate=false;root.matrix.set(2,.3,0,4, 0,.8,.2,2, 0,0,1.3,1, 0,0,0,1);
+  root.add(carrier);carrier.position.set(2,1,0);carrier.add(planet);planet.position.y=3;planet.rotation.x=.2;
+  const mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(),new THREE.MeshBasicMaterial(),2);planet.add(mesh);
+  mesh.setMatrixAt(1,new THREE.Matrix4().makeTranslation(0,1,2));root.updateMatrixWorld(true);
+  const binding={rootId:'demo',modelVersion:'one',objectId:'mesh',instanceId:1};
+  const rest=new Map([[carrier,carrier.matrix.clone()],[planet,planet.matrix.clone()]]),local=[.5,.2,.3];
+  const expected=anchorWorldPoint(mesh,local,binding);carrier.rotation.x=2.4;planet.rotation.x=-3.9;
+  assert.ok(stationaryAnchorWorldPoint(mesh,local,rest,binding).distanceTo(expected)<1e-12);
+  assert.ok(anchorWorldPoint(mesh,local,binding).distanceTo(expected)>1);
 });

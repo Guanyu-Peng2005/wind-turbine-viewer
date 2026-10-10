@@ -48,6 +48,19 @@ export function anchorWorldPoint(mesh:THREE.Mesh,localPosition:[number,number,nu
   return new THREE.Vector3(...localPosition).applyMatrix4(pointWorldMatrix(mesh,binding?.instanceId));
 }
 
+/** 标牌使用装配参考姿态；只移除登记的自转，保留装配位移及原始仿射矩阵。 */
+export function stationaryAnchorWorldPoint(mesh:THREE.Mesh,localPosition:[number,number,number],restTransforms:ReadonlyMap<THREE.Object3D,THREE.Matrix4>,binding?:AnchorBinding):THREE.Vector3{
+  mesh.updateWorldMatrix(true,false);
+  const ancestors:THREE.Object3D[]=[];
+  for(let node:THREE.Object3D|null=mesh;node;node=node.parent)ancestors.push(node);
+  const matrix=new THREE.Matrix4();
+  for(let i=ancestors.length-1;i>=0;i--){const node=ancestors[i];matrix.multiply(restTransforms.get(node)??node.matrix);}
+  if(binding?.instanceId!==undefined&&(mesh as THREE.InstancedMesh).isInstancedMesh){
+    const instance=new THREE.Matrix4();(mesh as THREE.InstancedMesh).getMatrixAt(binding.instanceId,instance);matrix.multiply(instance);
+  }
+  return new THREE.Vector3(...localPosition).applyMatrix4(matrix);
+}
+
 export function pointWorldMatrix(mesh:THREE.Mesh,instanceId?:number):THREE.Matrix4{
   mesh.updateWorldMatrix(true,false);
   const matrix=mesh.matrixWorld.clone();

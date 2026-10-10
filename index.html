@@ -202,8 +202,13 @@
         <i aria-hidden="true"></i>
         <button id="navigation-reset" type="button" title="复位视角"><span>复位视角</span></button>
         <i aria-hidden="true"></i>
-        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" title="报警点位"><span>报警点位</span></button>
+        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console" title="报警点位"><span>报警点位</span></button>
         <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注"><span>添加标注</span></button>
+        <section id="point-alarm-console" class="point-alarm-console alarm-console" aria-label="报警点位演示" hidden>
+          <label class="sr-only" for="point-alarm-source">选择演示告警测点</label>
+          <select id="point-alarm-source" disabled></select>
+          <button id="point-alarm-send" type="button" disabled>发送演示告警</button>
+        </section>
       </nav>
 
       <nav class="view-dock surface-panel" aria-label="相机视图" hidden>

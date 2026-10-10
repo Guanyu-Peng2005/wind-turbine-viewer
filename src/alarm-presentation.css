@@ -7,6 +7,9 @@
 .alarm-console :disabled { opacity:.45; cursor:wait; }
 .sensor-send-alarm { width:100%; margin-top:10px; }
 .sensor-panel.detail-open .alarm-console { display:none; }
+.viewer-toolbar .point-alarm-console { position:absolute; bottom:calc(100% + 8px); right:0; width:min(380px,100%); display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:8px; border:1px solid #5b4648; border-radius:6px; background:#0c1c25; box-shadow:0 8px 24px #0005; }
+.viewer-toolbar .point-alarm-console button { height:40px; min-height:40px; min-width:0; padding:0 12px; color:#fff4ef; background:#9a312c; border:1px solid #f18173; font-size:13px; font-weight:600; white-space:nowrap; }
+.viewer-toolbar .point-alarm-console button:hover { background:#b93b32; }
 .alarm-edge { position:absolute; inset:0; z-index:5; pointer-events:none; border:3px solid rgba(255,98,73,.8); box-shadow:inset 0 0 75px 12px rgba(255,51,35,.23); animation:alarmEdgeGlow 2.4s ease-in-out infinite; }
 .alarm-banner { position:absolute; z-index:7; left:20px; top:18px; right:372px; max-width:780px; display:grid; grid-template-columns:52px minmax(0,1fr) auto; align-items:center; gap:16px; padding:15px 18px; color:#fff3ed; background:linear-gradient(110deg,rgba(106,24,25,.98),rgba(35,15,21,.98)); border:1px solid #ff8872; border-left:5px solid #ff6246; border-radius:7px; box-shadow:0 10px 35px #0007,0 0 25px #ff49352b; }
 .desktop-proportions > .alarm-banner { zoom:var(--desktop-ui-scale,1); }
@@ -29,6 +32,10 @@
 .sensor-pin[data-demonstration="true"] .sensor-pin-label b { color:#fff0e5; font-size:14px; white-space:normal; }
 .sensor-pin[data-demonstration="true"] .sensor-pin-label small { color:#ffbba3; font-size:13px; }
 .sensor-pin[data-demonstration="true"].label-above .sensor-pin-label { top:auto; bottom:54px; }
+.sensor-pin[data-demonstration="true"].label-side .sensor-pin-label { top:50%; bottom:auto; left:calc(100% + 16px); transform:translateY(-50%); }
+.sensor-pin[data-demonstration="true"].label-side .sensor-pin-label::before { content:""; position:absolute; top:50%; left:-17px; width:16px; height:1px; background:#ff795c; }
+.sensor-pin[data-demonstration="true"].label-side.label-left .sensor-pin-label { left:auto; right:calc(100% + 16px); }
+.sensor-pin[data-demonstration="true"].label-side.label-left .sensor-pin-label::before { left:auto; right:-17px; }
 @keyframes alarmEdgeGlow { 0%,100%{opacity:.4;} 50%{opacity:.9;} }
 @keyframes alarmPointWave { 0%{transform:scale(.7);opacity:.9;} 100%{transform:scale(2.5);opacity:0;} }
 @media (max-width:900px),(pointer:coarse) and (max-width:1400px) {
@@ -37,6 +44,9 @@
   .alarm-console button { padding:0 5px; font-size:12px; }
   .alarm-console select { font-size:16px; min-height:44px; }
   .alarm-console button,.sensor-send-alarm { min-height:44px; }
+  .viewer-toolbar .point-alarm-console { width:min(380px,100%); gap:6px; padding:6px; }
+  .viewer-toolbar .point-alarm-console button { min-height:44px; height:44px; padding:0 8px; font-size:12px; }
+  .point-alarm-console label.sr-only { display:block; }
   .alarm-banner { top:calc(66px + env(safe-area-inset-top)); left:calc(10px + env(safe-area-inset-left)); right:calc(10px + env(safe-area-inset-right)); max-width:none; grid-template-columns:28px minmax(0,1fr); gap:7px 10px; padding:10px; }
   .alarm-symbol { width:28px; height:28px; font-size:22px; }
   .alarm-message strong { font-size:16px; margin:2px 0; }
