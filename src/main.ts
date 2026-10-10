@@ -15,9 +15,12 @@ import { equipmentContext, type RelationRole } from './part-relations';
 import { SpatialIndex, surfaceAnchor, worldVisible } from './spatial-index';
 import { AnchorRegistry, anchorWorldPoint, pointWorldMatrix, finiteVector, validBinding, type AnchorBinding } from './spatial-anchors';
 import modelIdentity from './model-identity.json';
+import { DemoAlarmState } from './demo-alarm';
+import { AlarmSound } from './alarm-sound';
 import './style.css';
 import './presentation.css';
 import './responsive.css';
+import './alarm-presentation.css';
 
 type DisplayMode = 'solid' | 'xray' | 'section';
 type PartRole = 'shell' | 'auxiliary' | 'internal';
@@ -418,6 +421,14 @@ const sensorAlarmThreshold = byId<HTMLElement>('sensor-alarm-threshold');
 const sensorTrend = byId<HTMLCanvasElement>('sensor-trend');
 const sensorCreateAnnotation = byId<HTMLButtonElement>('sensor-create-annotation');
 const sensorLayerToggle = byId<HTMLButtonElement>('sensor-layer-toggle');
+const alarmSource=byId<HTMLSelectElement>('alarm-source');
+const alarmSend=byId<HTMLButtonElement>('alarm-send');
+const alarmBanner=byId<HTMLElement>('alarm-banner');
+const alarmMute=byId<HTMLButtonElement>('alarm-mute');
+const demoAlarm=new DemoAlarmState();
+const alarmSound=new AlarmSound(renderDemoAlarm);
+let emitDemoSamples:(()=>void)|null=null;
+let alarmPreviousLayer=false;
 const navigationOrbit = byId<HTMLButtonElement>('navigation-orbit');
 const navigationPan = byId<HTMLButtonElement>('navigation-pan');
 const navigationReset = byId<HTMLButtonElement>('navigation-reset');
@@ -445,12 +456,12 @@ let stopSensorStream: (() => void) | null = null;
 const SENSOR_DEFINITIONS: SensorDefinition[] = [
   { id: 'WT01-MB-T01', name: '主轴承温度', partLabel: '主轴承', metric: 'temperature', unit: '℃', baseValue: 66.2, amplitude: 2.1, warning: 75, alarm: 85, precision: 1, phase: .2, anchor: [.52, .82, .36] },
   { id: 'WT01-MS-V01', name: '主轴径向振动', partLabel: '主轴组件', metric: 'vibration_rms', unit: 'mm/s', baseValue: 2.3, amplitude: .55, warning: 4.5, alarm: 7.1, precision: 2, phase: 1.1, anchor: [.58, .68, .62] },
-  { id: 'WT01-GB-OIL-T01', name: '齿轮箱油温', partLabel: '齿轮箱', metric: 'oil_temperature', unit: '℃', baseValue: 72.4, amplitude: 1.8, warning: 70, alarm: 80, precision: 1, phase: 2.4, anchor: [.42, .84, .36] },
-  { id: 'WT01-GB-V01', name: '齿轮箱高速级振动', partLabel: '齿轮箱', metric: 'vibration_rms', unit: 'mm/s', baseValue: 8.55, amplitude: .2, warning: 5.5, alarm: 8, precision: 2, phase: .8, anchor: [.68, .73, .66] },
+  { id: 'WT01-GB-OIL-T01', name: '齿轮箱油温', partLabel: '齿轮箱', metric: 'oil_temperature', unit: '℃', baseValue: 65.4, amplitude: 1.8, warning: 70, alarm: 80, precision: 1, phase: 2.4, anchor: [.42, .84, .36] },
+  { id: 'WT01-GB-V01', name: '齿轮箱高速级振动', partLabel: '齿轮箱', metric: 'vibration_rms', unit: 'mm/s', baseValue: 3.2, amplitude: .2, warning: 5.5, alarm: 8, precision: 2, phase: .8, anchor: [.68, .73, .66] },
   { id: 'WT01-HSC-V01', name: '高速联轴器振动', partLabel: '高速轴联轴器', metric: 'vibration_rms', unit: 'mm/s', baseValue: 3.05, amplitude: .65, warning: 5, alarm: 7.5, precision: 2, phase: 3.1, anchor: [.5, .78, .55] },
   { id: 'WT01-GEN-WT01', name: '发电机绕组温度', partLabel: '发电机', metric: 'winding_temperature', unit: '℃', baseValue: 88.6, amplitude: 3.4, warning: 105, alarm: 120, precision: 1, phase: 1.8, anchor: [.38, .86, .35] },
   { id: 'WT01-GEN-BT01', name: '发电机轴承温度', partLabel: '发电机', metric: 'bearing_temperature', unit: '℃', baseValue: 69.8, amplitude: 2.3, warning: 80, alarm: 90, precision: 1, phase: 4.2, anchor: [.7, .72, .62] },
-  { id: 'WT01-HYD-P01', name: '液压系统压力', partLabel: '液压系统', metric: 'pressure', unit: 'bar', baseValue: 155, amplitude: 4.5, warning: 175, alarm: 190, precision: 1, phase: 2.8, anchor: [.55, .82, .52], demoQuality: 'bad' },
+  { id: 'WT01-HYD-P01', name: '液压系统压力', partLabel: '液压系统', metric: 'pressure', unit: 'bar', baseValue: 155, amplitude: 4.5, warning: 175, alarm: 190, precision: 1, phase: 2.8, anchor: [.55, .82, .52] },
   { id: 'WT01-TR-T01', name: '辅助变压器温度', partLabel: '辅助变压器', metric: 'temperature', unit: '℃', baseValue: 76.3, amplitude: 2.8, warning: 90, alarm: 105, precision: 1, phase: 5.1, anchor: [.52, .88, .48] },
   { id: 'WT01-YAW-V01', name: '偏航驱动振动', partLabel: '偏航系统', metric: 'vibration_rms', unit: 'mm/s', baseValue: 1.75, amplitude: .4, warning: 4.5, alarm: 7.1, precision: 2, phase: 3.8, anchor: [.62, .8, .44] },
 ];
@@ -1470,7 +1481,8 @@ function presentationFrame():PresentationFrame{
   const canvasRect=canvas.getBoundingClientRect(),panel=inspector.getBoundingClientRect();
   const toolbar=document.querySelector<HTMLElement>('.viewer-toolbar')!.getBoundingClientRect();
   const compact=compactViewport.matches,margin=compact?12:24*desktopUiScale,left=margin;
-  const top=compact?Math.max(inspectorToggle.getBoundingClientRect().bottom,document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect().bottom)-canvasRect.top+12:margin;
+  let top=compact?Math.max(inspectorToggle.getBoundingClientRect().bottom,document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect().bottom)-canvasRect.top+12:margin;
+  if(!alarmBanner.hidden)top=Math.max(top,alarmBanner.getBoundingClientRect().bottom-canvasRect.top+margin);
   let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-(compact?20:20*desktopUiScale));
   if(!compact||mobileInspectorOpen){
     if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
@@ -2283,11 +2295,11 @@ function createDemoSensorAdapter(): SensorDataAdapter {
       const emit = () => {
         const now = Date.now();
         const elapsed = now / 1000;
-        SENSOR_DEFINITIONS.forEach((definition, index) => {
-          const quality = definition.demoQuality ?? (index === 6 && Math.sin(elapsed / 17) > .96 ? 'uncertain' : 'good');
+        SENSOR_DEFINITIONS.forEach((definition) => {
+          const quality = definition.demoQuality ?? 'good';
           const wave = Math.sin(elapsed * .19 + definition.phase) * .72
             + Math.sin(elapsed * .053 + definition.phase * 1.7) * .28;
-          const value = quality === 'bad' ? null : definition.baseValue + definition.amplitude * wave;
+          const value = demoAlarm.valueFor(definition.id,quality === 'bad' ? null : definition.baseValue + definition.amplitude * wave);
           onValue({
             sensorId: definition.id,
             value,
@@ -2297,9 +2309,9 @@ function createDemoSensorAdapter(): SensorDataAdapter {
           });
         });
       };
-      emit();
+      emitDemoSamples=emit;emit();
       const timer = window.setInterval(emit, 1000);
-      return () => window.clearInterval(timer);
+      return () => {window.clearInterval(timer);if(emitDemoSamples===emit)emitDemoSamples=null;};
     },
   };
 }
@@ -2476,6 +2488,7 @@ function renderSensorUi(): void {
     counts[sensor.status] += 1;
     const row = sensorRowElements.get(sensor.id);
     if (row) {
+      row.classList.toggle('demo-alarm-target',demoAlarm.active?.target.id===sensor.id);
       row.dataset.status = sensor.status;
       row.classList.toggle('active', sensor.id === selectedSensorId);
       row.querySelector('small')!.textContent = `${sensor.partLabel} · ${sensorStatusText(sensor.status)}`;
@@ -2483,6 +2496,7 @@ function renderSensorUi(): void {
     }
     const marker = sensorMarkerElements.get(sensor.id);
     if (marker) {
+      marker.dataset.demonstration=String(demoAlarm.active?.target.id===sensor.id);
       marker.dataset.status = sensor.status;
       marker.classList.toggle('active', sensor.id === selectedSensorId);
       marker.querySelector('small')!.textContent = `${formatSensorValue(sensor)}${sensor.value === null ? '' : ` ${sensorUnitText(sensor.unit)}`}`;
@@ -2498,6 +2512,45 @@ function renderSensorUi(): void {
   const selected = sensors.find((sensor) => sensor.id === selectedSensorId);
   if (selected) renderSensorDetail(selected);
   updateSensorOverlay();
+  renderDemoAlarm();
+}
+
+function renderDemoAlarm():void{
+  const signal=demoAlarm.active;
+  alarmBanner.hidden=!signal;byId('alarm-edge').hidden=!signal;
+  byId('app').classList.toggle('demo-alarm-active',Boolean(signal));
+  if(!signal)return;
+  const title=`${signal.target.name}超限`;
+  if(byId('alarm-title').textContent!==title)byId('alarm-title').textContent=title;
+  byId('alarm-value').textContent=`当前 ${signal.value.toFixed(signal.target.precision)} ${sensorUnitText(signal.target.unit)}　告警阈值 ${signal.target.alarm} ${sensorUnitText(signal.target.unit)}`;
+  const state=alarmSound.diagnostics().state;
+  alarmMute.textContent=state==='playing'||state==='starting'?'消音':'开启声音';
+  alarmMute.setAttribute('aria-pressed',String(demoAlarm.muted));
+  byId('alarm-sound-state').textContent=state==='playing'?'提示音已开启':state==='starting'?'正在开启声音':state==='unavailable'?'当前浏览器声音不可用':state==='blocked'?'点击开启声音':'提示音已关闭';
+}
+
+function triggerDemoAlarm(sensorId=alarmSource.value):boolean{
+  const sensor=sensors.find(candidate=>candidate.id===sensorId);if(!sensor||!emitDemoSamples)return false;
+  if(!demoAlarm.active)alarmPreviousLayer=sensorLayerVisible;
+  demoAlarm.raise(sensor);alarmSource.value=sensorId;
+  // Start audio in the trusted click handler before any camera or geometry work.
+  void alarmSound.start();
+  emitDemoSamples();setSensorLayerVisible(true);renderSensorUi();
+  if(sensor.binding.rootId!=='source'){setPresentationMode('drivetrain');applyDisplayMode(displayMode);}
+  selectPart(sensor.part,false,true);selectedSensorId=sensor.id;
+  setInspectorTab('sensors');renderSensorUi();
+  if(compactViewport.matches)setMobileInspectorOpen(false);
+  fitBounds(partBounds(sensor.part),new THREE.Vector3(.65,.42,1.4),1.4,partOrbitCenter(sensor.part),presentationFrame());
+  byId('alarm-announcement').textContent=`演示告警：${sensor.name}超限。可消音或解除告警。`;
+  return true;
+}
+
+function clearDemoAlarm():void{
+  if(!demoAlarm.active)return;
+  demoAlarm.clear();alarmSound.stop();emitDemoSamples?.();
+  setSensorLayerVisible(alarmPreviousLayer);renderSensorUi();
+  byId('alarm-announcement').textContent='演示告警已解除，测点恢复正常。';
+  if(camera.view?.enabled)applyPresentationOffset(presentationFrame());invalidateStaticFrame();
 }
 
 function updateSensorOverlay(): void {
@@ -2519,6 +2572,11 @@ function updateSensorOverlay(): void {
     if (!visible) return;
     const left = `${Math.round((overlayOffsetX+(projected.x*.5+.5)*viewportWidth)*10)/10}px`;
     const top = `${Math.round((overlayOffsetY+(-projected.y*.5+.5)*viewportHeight)*10)/10}px`;
+    if(demoAlarm.active?.target.id===sensor.id){
+      const x=(projected.x*.5+.5)*viewportWidth,y=(-projected.y*.5+.5)*viewportHeight,labelWidth=Math.min(200,viewportWidth-32);
+      const shift=Math.max(labelWidth/2+12,Math.min(viewportWidth-labelWidth/2-12,x))-x;
+      marker.style.setProperty('--alarm-label-shift',`${shift}px`);marker.classList.toggle('label-above',y>viewportHeight-150);
+    }
     if (marker.style.left !== left) marker.style.left = left;
     if (marker.style.top !== top) marker.style.top = top;
   });
@@ -2608,6 +2666,9 @@ async function initializeSensors(): Promise<void> {
     };
   }));
   sensors.push(...prepared.filter((sensor):sensor is SensorRuntime=>sensor!==null));
+  alarmSource.replaceChildren();
+  for(const sensor of sensors){const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;alarmSource.append(option);}
+  alarmSource.value='WT01-GB-V01';alarmSource.disabled=false;alarmSend.disabled=false;
   renderSensorUi();
   stopSensorStream = createDemoSensorAdapter().start(applySensorValue);
 }
@@ -2710,6 +2771,16 @@ navigationOrbit.addEventListener('click', () => setNavigationMode('orbit'));
 navigationPan.addEventListener('click', () => setNavigationMode('pan'));
 navigationReset.addEventListener('click', resetViewerView);
 sensorLayerToggle.addEventListener('click', () => setSensorLayerVisible(!sensorLayerVisible));
+alarmSend.addEventListener('click',()=>triggerDemoAlarm());
+byId('sensor-send-alarm').addEventListener('click',()=>{if(selectedSensorId)triggerDemoAlarm(selectedSensorId);});
+byId('alarm-clear').addEventListener('click',clearDemoAlarm);
+alarmMute.addEventListener('click',()=>{
+  if(!demoAlarm.active)return;
+  const playing=['playing','starting'].includes(alarmSound.diagnostics().state);
+  demoAlarm.muted=playing;if(playing)alarmSound.stop(true);else void alarmSound.start();renderDemoAlarm();
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&demoAlarm.active){demoAlarm.muted=true;alarmSound.stop(true);}});
+window.addEventListener('pagehide',()=>alarmSound.dispose());
 sensorDetailClose.addEventListener('click', () => {
   selectedSensorId = null;
   sensorDetail.hidden = true;
@@ -3141,6 +3212,9 @@ loader.load(
       selectAnnotation,
       selectSensor,
       createWebSocketSensorAdapter,
+      triggerDemoAlarm,
+      clearDemoAlarm,
+      getDemoAlarmState:()=>({active:demoAlarm.active,muted:demoAlarm.muted,sound:alarmSound.diagnostics()}),
       setView,
       applyDisplayMode,
       majorPartGroups,

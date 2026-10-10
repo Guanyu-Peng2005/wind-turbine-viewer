@@ -14,6 +14,21 @@
 
       <div class="annotation-overlay" id="annotation-overlay" aria-live="polite"></div>
       <div class="sensor-overlay" id="sensor-overlay" aria-live="polite"></div>
+      <div id="alarm-edge" class="alarm-edge" aria-hidden="true" hidden></div>
+      <section id="alarm-banner" class="alarm-banner" aria-label="演示告警" hidden>
+        <div class="alarm-symbol" aria-hidden="true">!</div>
+        <div class="alarm-message">
+          <span class="alarm-kicker">演示告警 · 需要关注</span>
+          <strong id="alarm-title"></strong>
+          <p id="alarm-value"></p>
+        </div>
+        <div class="alarm-banner-actions">
+          <button id="alarm-mute" type="button" aria-pressed="false">消音</button>
+          <button id="alarm-clear" type="button">解除告警</button>
+          <small id="alarm-sound-state"></small>
+        </div>
+      </section>
+      <p id="alarm-announcement" class="sr-only" role="alert"></p>
 
       <section class="status-strip surface-panel" aria-live="polite">
         <div class="status-dot"></div>
@@ -146,6 +161,12 @@
             <span class="simulation-badge">模拟数据</span>
           </header>
 
+          <section class="alarm-console" aria-label="发送演示告警">
+            <label for="alarm-source">演示测点</label>
+            <select id="alarm-source" aria-label="选择演示告警测点" disabled></select>
+            <button id="alarm-send" type="button" disabled>发送演示告警</button>
+          </section>
+
           <div class="sensor-summary" aria-label="监测状态汇总">
             <span><i class="normal"></i><b id="sensor-normal-count">0</b><small>正常</small></span>
             <span><i class="warning"></i><b id="sensor-warning-count">0</b><small>预警</small></span>
@@ -170,6 +191,7 @@
             <canvas id="sensor-trend" width="520" height="150" aria-label="最近一分钟趋势"></canvas>
             <div class="sensor-thresholds"><span>预警 <b id="sensor-warning-threshold">—</b></span><span>报警 <b id="sensor-alarm-threshold">—</b></span></div>
             <button id="sensor-create-annotation" type="button">转为人工标注</button>
+            <button id="sensor-send-alarm" class="sensor-send-alarm" type="button">发送此测点告警</button>
           </section>
         </section>
       </aside>
