@@ -1,0 +1,18 @@
+告警音效来源与授权
+
+原始作品：Alarm
+作者：EZduzziteh
+作品页：https://opengameart.org/content/alarm-1
+原文件：https://opengameart.org/sites/default/files/alarm_2.ogg
+许可：CC0 1.0 公共领域贡献，允许商业使用、修改和再分发。
+许可页：https://creativecommons.org/publicdomain/zero/1.0/
+获取日期：2026-10-10
+
+本站文件：alarm.wav
+处理：保留原音效，将音量提高 18 分贝，首尾各做 5 毫秒淡入淡出，
+转换为 44.1 千赫兹、双声道、16 位无压缩波形音频，便于手机和平板解码。
+播放时使用 0.28 倍增益，循环原素材；没有额外合成告警音调。
+音效随网站一并托管，不依赖来源网站在线播放。
+
+原文件 SHA-256：ace7c78d3e071eadce6db3df560fb4722af41efbc0934b55439dcc28ab27bb20
+本站文件 SHA-256：c3563f20fd0d8e34c75c40ef90f2f220c11fb0d70c1a04fcc1147b8d4a47eb91

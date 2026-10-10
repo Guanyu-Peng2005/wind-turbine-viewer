@@ -426,7 +426,7 @@ const alarmSend=byId<HTMLButtonElement>('alarm-send');
 const alarmBanner=byId<HTMLElement>('alarm-banner');
 const alarmMute=byId<HTMLButtonElement>('alarm-mute');
 const demoAlarm=new DemoAlarmState();
-const alarmSound=new AlarmSound(renderDemoAlarm);
+const alarmSound=new AlarmSound(renderDemoAlarm,`${import.meta.env.BASE_URL}audio/alarm.wav`);
 let emitDemoSamples:(()=>void)|null=null;
 let alarmPreviousLayer=false;
 const navigationOrbit = byId<HTMLButtonElement>('navigation-orbit');
@@ -2526,7 +2526,7 @@ function renderDemoAlarm():void{
   const state=alarmSound.diagnostics().state;
   alarmMute.textContent=state==='playing'||state==='starting'?'消音':'开启声音';
   alarmMute.setAttribute('aria-pressed',String(demoAlarm.muted));
-  byId('alarm-sound-state').textContent=state==='playing'?'提示音已开启':state==='starting'?'正在开启声音':state==='unavailable'?'当前浏览器声音不可用':state==='blocked'?'点击开启声音':'提示音已关闭';
+  byId('alarm-sound-state').textContent=state==='playing'?'提示音已开启':state==='starting'?'正在开启声音':state==='unavailable'?'当前浏览器声音不可用':state==='failed'?'音效加载失败，点击开启声音重试':state==='blocked'?'点击开启声音':'提示音已关闭';
 }
 
 function triggerDemoAlarm(sensorId=alarmSource.value):boolean{
@@ -2669,6 +2669,7 @@ async function initializeSensors(): Promise<void> {
   alarmSource.replaceChildren();
   for(const sensor of sensors){const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;alarmSource.append(option);}
   alarmSource.value='WT01-GB-V01';alarmSource.disabled=false;alarmSend.disabled=false;
+  alarmSound.preload();
   renderSensorUi();
   stopSensorStream = createDemoSensorAdapter().start(applySensorValue);
 }
