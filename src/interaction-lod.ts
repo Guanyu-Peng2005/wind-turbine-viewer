@@ -16,6 +16,7 @@ export class InteractionLod {
   private requested = false;
   private disposed = false;
   private bindings: Binding[] = [];
+  private byMesh=new WeakMap<THREE.Mesh,Binding>();
   private pool = new Set<THREE.BufferGeometry>();
   private skipped = 0;
   private rejectedBounds = 0;
@@ -53,7 +54,7 @@ export class InteractionLod {
         if (before.min.distanceTo(after.min) > tolerance || before.max.distanceTo(after.max) > tolerance) {
           this.rejectedBounds++; return;
         }
-        this.bindings.push({ mesh, original, low });
+        const binding={mesh,original,low};this.bindings.push(binding);this.byMesh.set(mesh,binding);
       });
       const used = new Set(this.bindings.map(b => b.low));
       this.pool.forEach(g => { if (!used.has(g)) { g.dispose(); this.pool.delete(g); } });
@@ -73,6 +74,10 @@ export class InteractionLod {
     this.bindings.forEach(b => { b.mesh.geometry = next ? b.low : b.original; });
     this.active = next;
     return true;
+  }
+
+  geometryFor(mesh:THREE.Mesh,detailed:boolean):THREE.BufferGeometry{
+    const binding=this.byMesh.get(mesh);return binding?(detailed?binding.original:binding.low):mesh.geometry;
   }
 
   diagnostics() {

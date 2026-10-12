@@ -17,10 +17,14 @@ import { AnchorRegistry, anchorWorldPoint, stationaryAnchorWorldPoint, pointWorl
 import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
+import { normalizeRotorSpeed } from './rotor-speed';
+import { DisassemblyView, type DisassemblySource } from './disassembly-view';
+import { brakeDisplayVariants } from './brake-representation';
 import './style.css';
 import './presentation.css';
 import './responsive.css';
 import './alarm-presentation.css';
+import './disassembly.css';
 
 type DisplayMode = 'solid' | 'xray' | 'section';
 type PartRole = 'shell' | 'auxiliary' | 'internal';
@@ -337,6 +341,9 @@ let modelRoot: THREE.Object3D | null = null;
 let homeViewBounds:THREE.Box3|null=null;
 let homeFramingActive=false;
 let drivetrain: Drivetrain | null = null;
+let disassemblyView:DisassemblyView|null=null;
+let disassemblyLoading:Promise<void>|null=null;
+let partsPageOpen=false;
 let interactionLod: InteractionLod | null = null;
 let detailRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 let rotorSpinning = false;
@@ -367,7 +374,6 @@ const focusButton = byId<HTMLButtonElement>('focus-selected');
 const isolateButton = byId<HTMLButtonElement>('isolate-selected');
 const hideButton = byId<HTMLButtonElement>('hide-selected');
 const clearPartFocusButton = byId<HTMLButtonElement>('clear-part-focus');
-const explodeRange = byId<HTMLInputElement>('explode-range');
 const sectionRange = byId<HTMLInputElement>('section-range');
 const hideAuxiliary = byId<HTMLInputElement>('hide-auxiliary');
 const annotationToggle = byId<HTMLButtonElement>('annotation-toggle');
@@ -1442,26 +1448,6 @@ function rerouteHydraulicHoseAroundRearGuard(): void {
     tubeRadius: 0.018,
     endpointMode: 'source-fitting-centers',
   };
-}
-
-function updateExplosion(percent: number): void {
-  if (!modelRoot) return;
-  const amplitude = modelSize.length() * 0.16 * (percent / 100);
-  parts.forEach((part) => {part.node.position.copy(part.originalPosition);part.node.updateMatrix();});
-  modelRoot.updateMatrixWorld(true);
-  parts.forEach((part, index) => {
-    if (percent <= 0 || !part.node.parent) return;
-    const layerBias = 0.35 + ((index % 9) / 8) * 0.35;
-    const offsetWorld = part.directionWorld.clone().multiplyScalar(amplitude * layerBias);
-    const desiredWorld = part.node.getWorldPosition(new THREE.Vector3()).add(offsetWorld);
-    const desiredLocal = part.node.parent.worldToLocal(desiredWorld);
-    part.node.position.copy(desiredLocal);
-    part.node.updateMatrix();
-  });
-  modelRoot.updateMatrixWorld(true);
-  selectionBox.visible = false;
-  if (selectedPart) emphasizeSelected(selectedPart);
-  invalidateStaticFrame();
 }
 
 function formatNumber(value: number): string {
@@ -2787,6 +2773,7 @@ function beginAnnotationPlacement(): void {
 }
 
 function setOrbitPivotFromPointer(event: MouseEvent): void {
+  if(partsPageOpen)return;
   restoreFullDetail();
   if (!modelRoot || annotationModeActive || pendingAnnotationId) return;
   const part=selectedPart??pickPartAtPoint(event.clientX,event.clientY);
@@ -2865,6 +2852,7 @@ annotationForm.addEventListener('submit', (event) => {
 
 const modelPointerIds=new Set<number>();
 canvas.addEventListener('pointerdown', (event) => {
+  if(partsPageOpen)return;
   if (event.button !== 0) return;
   modelPointerIds.add(event.pointerId);
   if(modelPointerIds.size>1){partPointerDragged=true;return;}
@@ -2873,9 +2861,11 @@ canvas.addEventListener('pointerdown', (event) => {
 });
 let partPointerDragged=false;
 canvas.addEventListener('pointermove',event=>{
+  if(partsPageOpen)return;
   if(annotationPointerStart&&Math.hypot(event.clientX-annotationPointerStart.x,event.clientY-annotationPointerStart.y)>5)partPointerDragged=true;
 });
 canvas.addEventListener('pointerup', (event) => {
+  if(partsPageOpen)return;
   modelPointerIds.delete(event.pointerId);
   const start = annotationPointerStart;
   annotationPointerStart = null;
@@ -2947,6 +2937,7 @@ function selectPartAtPointer(event:PointerEvent):void{
 window.addEventListener('resize', updateAnnotationOverlay);
 
 document.addEventListener('keydown', (event) => {
+  if(partsPageOpen){if(event.key==='Escape'){event.preventDefault();if(!disassemblyView?.clearSelection())closeDisassembly();}return;}
   const editing = document.activeElement instanceof HTMLInputElement
     || document.activeElement instanceof HTMLTextAreaElement
     || document.activeElement instanceof HTMLSelectElement;
@@ -3015,13 +3006,6 @@ hideAuxiliary.addEventListener('change', () => {
   renderPartList(search.value);
 });
 
-explodeRange.addEventListener('input', () => {
-  beginInteractiveRender();
-  const value = Number(explodeRange.value);
-  byId<HTMLOutputElement>('explode-value').value = `${value}%`;
-  updateExplosion(value);
-  endInteractiveRender();
-});
 sectionRange.addEventListener('input', () => {
   const value = Number(sectionRange.value);
   byId<HTMLOutputElement>('section-value').value = `${value}%`;
@@ -3074,15 +3058,115 @@ for (const mode of ['cad', 'section'] as const) {
   });
 }
 
+const speedSlider=byId<HTMLInputElement>('rotor-speed-slider');
+speedSlider.addEventListener('input',()=>setRotorSpeed(Number(speedSlider.value)));
+function setRotorSpeed(rpm:number):void{
+  const value=normalizeRotorSpeed(rpm);speedSlider.value=String(value);
+  speedSlider.setAttribute('aria-valuetext',value===0?'停止':`${value.toFixed(1)} 转每分`);byId<HTMLOutputElement>('rotor-speed-value').value=value.toFixed(1);
+  if(drivetrain){drivetrain.rpm=value;setMotionRunning(value>0);}
+}
+
+function collectDisassemblySources():DisassemblySource[]{
+  const sources:DisassemblySource[]=[],seen=new Set<THREE.Mesh>();
+  const brake=majorPartByLabel('高速轴制动器');
+  const brakeVariants=brakeDisplayVariants(parts.filter(part=>brake&&belongsToPart(part.node,brake)).map(part=>part.node));
+  const duplicate=(node:THREE.Object3D)=>{for(let parent:THREE.Object3D|null=node;parent;parent=parent.parent)if(parent.userData.presentationDuplicateOf)return true;return false;};
+  const label=(name:string,fallback:string)=>(name.split('#').at(-1)??name).match(/[\u3400-\u9fff][\u3400-\u9fff\d×（）·、 .-]*/)?.[0]?.replace(/[-.\s]+$/,'')||fallback;
+  for(const part of parts){
+    if(duplicate(part.node)||brakeVariants.hidden.has(part.node))continue;
+    const pieces:DisassemblySource['pieces']=[];
+    part.node.traverse(node=>{
+      const mesh=node as THREE.Mesh;if(!mesh.isMesh||seen.has(mesh)||duplicate(mesh)||!worldVisible(mesh))return;
+      const finishes=Array.isArray(mesh.material)?mesh.material:[mesh.material];if(finishes.every(material=>material.opacity<.3))return;
+      seen.add(mesh);
+      if((mesh as THREE.InstancedMesh).isInstancedMesh){for(let i=0;i<(mesh as THREE.InstancedMesh).count;i++)pieces.push({mesh,instanceId:i});}else pieces.push({mesh});
+    });
+    if(!pieces.length)continue;
+    let system=majorMeshToPart.get(pieces[0].mesh)?.label;
+    if(!system||system==='机舱外壳')continue;
+    const partLabel=part.node===brakeVariants.canonical?'高速轴制动器（完整总成）':label(part.label,`${system}零件`);
+    let cluster=partLabel;
+    if(/螺栓|螺钉|垫圈|螺母|销|卡簧/.test(partLabel))cluster='紧固件';
+    else if(system==='高速轴制动器')cluster='制动钳总成';
+    else if(system==='齿轮箱')cluster='箱体';
+    else if(system==='发电机')cluster='机座与外壳';
+    else{
+      const major=majorMeshToPart.get(pieces[0].mesh);
+      if(major){let branch=part.node;while(branch.parent&&!partRoots(major).includes(branch.parent)&&!partRoots(major).includes(branch))branch=branch.parent;cluster=label(branch.name,partLabel);}
+    }
+    sources.push({id:`source-${part.id}`,label:partLabel,system,cluster,pieces});
+  }
+  drivetrain?.demonstrations.forEach((demo,index)=>demo.root.traverse(node=>{
+    const mesh=node as THREE.Mesh;if(!mesh.isMesh)return;
+    const count=(mesh as THREE.InstancedMesh).isInstancedMesh?(mesh as THREE.InstancedMesh).count:1;
+    let names='';for(let node:THREE.Object3D|null=mesh;node&&node!==demo.root;node=node.parent)names+=' '+node.name;
+    let cluster='轴系与连接件';
+    if(index===0){if(/一级/.test(names))cluster='一级行星机构';else if(/二级/.test(names))cluster='二级行星机构';else if(/平行级/.test(names))cluster='平行轴齿轮组';else if(/制动/.test(names))cluster='制动盘组件';}
+    else{
+      const generator=drivetrain!.generatorModel!;
+      if(isWithinSelectedAssembly(mesh,generator.slipRings))cluster='集电环组件';
+      else if(isWithinSelectedAssembly(mesh,generator.brushRig))cluster='电刷组件';
+      else if(isWithinSelectedAssembly(mesh,generator.endCovers))cluster='端盖组件';
+      else if(isWithinSelectedAssembly(mesh,generator.statorCoils))cluster='定子绕组';
+      else if(/轴承/.test(names))cluster='轴承组件';
+      else if(/转子/.test(names))cluster='转子总成';
+      else if(/定子|叠片/.test(names))cluster='定子铁心';
+      else if(/风扇|风叶|冷却/.test(names))cluster='冷却组件';
+      else cluster='机座与外壳';
+    }
+    const brakeDisc=mesh.name==='高速制动盘示意';
+    for(let i=0;i<count;i++)sources.push({id:`internal-${index}-${mesh.id}-${i}`,label:label(mesh.name,'内部零件'),system:brakeDisc?'高速轴制动器':index===0?'齿轮箱':'发电机',cluster:brakeDisc?'制动盘':cluster,internal:true,pieces:[{mesh,...((mesh as THREE.InstancedMesh).isInstancedMesh?{instanceId:i}:{})}]});
+  }));
+  const order=['叶片','轮毂总成','主轴组件','主轴承','齿轮箱','齿轮箱内部','高速轴制动器','高速轴联轴器','发电机','发电机内部','主机架','液压系统','辅助变压器','偏航系统','机舱外壳','塔筒与基础','其他附件'];
+  return sources.sort((a,b)=>order.indexOf(a.system)-order.indexOf(b.system));
+}
+
+async function openDisassembly(updateUrl=true):Promise<void>{
+  if(!modelRoot||partsPageOpen)return;
+  restoreFullDetail();setPresentationMode('overview');resetViewerView();applyDisplayMode('xray');partsPageOpen=true;controls.enabled=false;annotationPointerStart=null;modelPointerIds.clear();
+  if(demoAlarm.active){demoAlarm.muted=true;alarmSound.stop(true);}
+  byId('app').classList.add('disassembly-mode');byId('disassembly-page').hidden=false;byId('disassembly-busy').hidden=false;byId('disassembly-error').hidden=true;
+  canvas.setAttribute('aria-label','零件爆炸分解查看器');
+  byId('disassembly-page').querySelectorAll<HTMLButtonElement|HTMLSelectElement|HTMLInputElement>('button:not(#disassembly-close),select,input').forEach(control=>{control.disabled=true;});
+  if(updateUrl){const url=new URL(location.href);url.searchParams.set('view','parts');history.pushState(null,'',url);}
+  try{
+    if(!disassemblyView){
+      disassemblyView=new DisassemblyView({renderer,canvas,page:byId('disassembly-page'),environment:scene.environment,axis:new THREE.Vector3(...(drivetrain?.anchors.lowAxis??[1,0,0]) as [number,number,number]),span:drivetrain?.bounds.getSize(new THREE.Vector3()).length()??10,majorSystems:majorPartGroups.flatMap(group=>group.parts.filter(part=>part.label!=='机舱外壳').map(part=>part.label)),camera:()=>camera,target:()=>controls.target.clone(),close:()=>closeDisassembly(),
+        geometry:(mesh,detailed)=>interactionLod?.geometryFor(mesh,detailed)??mesh.geometry,
+        interactionReady:()=>interactionLod?.ready??false,
+        material:mesh=>mesh.material});
+      disassemblyLoading=disassemblyView.initialize(collectDisassemblySources());
+    }
+    await disassemblyLoading;
+    if(!partsPageOpen)return;
+    byId('disassembly-busy').hidden=true;
+    byId('disassembly-page').querySelectorAll<HTMLButtonElement|HTMLSelectElement|HTMLInputElement>('button,select,input').forEach(control=>{control.disabled=false;});
+    disassemblyView.open();byId('disassembly-close').focus({preventScroll:true});
+  }catch(error){
+    console.error('零件分解准备失败',error);disassemblyView?.dispose();disassemblyView=null;disassemblyLoading=null;closeDisassembly();
+    byId('disassembly-error').textContent='零件分解准备失败，请重试。';byId('disassembly-error').hidden=false;
+  }
+}
+
+function closeDisassembly(updateUrl=true):void{
+  if(!partsPageOpen)return;
+  partsPageOpen=false;disassemblyView?.close();byId('disassembly-page').hidden=true;byId('app').classList.remove('disassembly-mode');controls.enabled=true;
+  canvas.setAttribute('aria-label','风机三维模型查看器');
+  if(updateUrl){const url=new URL(location.href);url.searchParams.delete('view');history.replaceState(null,'',url);}
+  camera.aspect=viewportWidth/Math.max(1,viewportHeight);
+  if(homeFramingActive)fitHomeView();else if(camera.view?.enabled)applyPresentationOffset(presentationFrame());else camera.updateProjectionMatrix();
+  previousFrameTime=performance.now();setRenderScale(restingRenderScale());invalidateStaticFrame();renderDemoAlarm();
+  byId('disassembly-open').focus({preventScroll:true});
+}
+byId('disassembly-open').addEventListener('click',()=>{void openDisassembly();});
+window.addEventListener('popstate',()=>{if(new URL(location.href).searchParams.get('view')==='parts')void openDisassembly(false);else closeDisassembly(false);});
+
 function resetViewerView():void{
   restoreFullDetail();
   setNavigationMode('orbit', false);
   setAnnotationPanelOpen(false,false);
   clearVisibilityFilters();
   search.value = '';
-  explodeRange.value = '0';
-  byId<HTMLOutputElement>('explode-value').value = '0%';
-  updateExplosion(0);
   selectPart(null);
   renderPartList();
   setView('nacelle');
@@ -3201,6 +3285,7 @@ loader.load(
     try {
       setupMotionLinks();
       byId<HTMLInputElement>('show-internals').disabled = false;
+      byId<HTMLInputElement>('rotor-speed-slider').disabled=false;
       motionReady=true;
     } catch (error) {
       console.error(error);
@@ -3234,6 +3319,7 @@ loader.load(
     // Start the assembled turbine turning; reveal the internals only when the
     // user enters a drivetrain view or explicitly enables the internal display.
     setMotionRunning(motionReady);
+    byId<HTMLButtonElement>('disassembly-open').disabled=false;
     setRenderScale(restingRenderScale());
     status.textContent = motionReady?'加载完成':'传动初始化失败，请刷新重试';
     progressText.textContent = '100%';
@@ -3246,6 +3332,10 @@ loader.load(
       modelBounds,
       drivetrain,
       setMotionRunning,
+      setRotorSpeed,
+      openDisassembly,
+      closeDisassembly,
+      getDisassemblyState:()=>disassemblyView?.diagnostics()??{active:partsPageOpen,total:0},
       requestRender: invalidateStaticFrame,
       setMotionOptimizationEnabled: (enabled:boolean)=>{motionOptimizationEnabled=enabled;invalidateStaticFrame();},
       renderReferenceFrame: () => { renderer.render(scene, camera); renderRequested = false; },
@@ -3292,6 +3382,7 @@ loader.load(
         viewport: [canvas.width, canvas.height],
       }),
     };
+    if(new URL(location.href).searchParams.get('view')==='parts')void openDisassembly(false);
   },
   (event) => {
     const progress = event.total ? Math.round((event.loaded / event.total) * 100) : 0;
@@ -3308,10 +3399,11 @@ loader.load(
 );
 
 renderer.setAnimationLoop(() => {
-  resizeRenderer();
   const now = performance.now();
   const delta = Math.max((now - previousFrameTime) / 1000, 0);
   previousFrameTime = now;
+  if(partsPageOpen){if(!document.hidden)disassemblyView?.render(delta);return;}
+  resizeRenderer();
   const motionActive = rotorSpinning && !!drivetrain && drivetrain.rpm > 0 && !document.hidden;
   if (motionActive && drivetrain) {
     drivetrain.advance(delta);
@@ -3370,6 +3462,7 @@ window.addEventListener('beforeunload', () => {
   hubShellMaterial.dispose();
   environmentRenderTarget.dispose();
   generatorMaterials.dispose();
+  disassemblyView?.dispose();
   motionRenderer?.dispose();
   fixedRenderer?.dispose();
   generatorGlassRenderer?.dispose();

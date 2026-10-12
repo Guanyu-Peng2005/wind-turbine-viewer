@@ -242,10 +242,6 @@
           <span>隐藏附着件与小架</span>
         </label>
 
-        <label class="range-control" hidden>
-          <span><b>爆炸展开</b><output id="explode-value">0%</output></span>
-          <input id="explode-range" type="range" min="0" max="100" value="0" />
-        </label>
 
         <label class="range-control section-control" id="section-control" hidden>
           <span><b>剖切位置</b><output id="section-value">50%</output></span>
@@ -257,6 +253,31 @@
 
       <section class="control-deck transmission-control surface-panel" aria-label="传动结构展示">
         <label class="transmission-toggle" title="内部为典型传动结构示意，未经厂家参数验证。"><input id="show-internals" type="checkbox" disabled /><span>传动结构透视</span></label>
+        <div class="assembly-controls">
+          <div class="rotor-speed-control">
+            <label for="rotor-speed-slider"><span>叶轮转速</span><b><output id="rotor-speed-value">10.0</output><small>转/分</small></b></label>
+            <input id="rotor-speed-slider" type="range" min="0" max="20" step="0.5" value="10" aria-label="叶轮演示转速" aria-valuetext="10.0 转每分" title="左右拖动调速，调至零停止" disabled />
+          </div>
+          <button id="disassembly-open" type="button" disabled>零件分解</button>
+        </div>
+        <span id="disassembly-error" role="alert" hidden></span>
+      </section>
+
+      <section id="disassembly-page" aria-label="零件爆炸分解与平铺" hidden>
+        <header class="disassembly-header">
+          <div class="disassembly-heading"><button id="disassembly-close" type="button">退出分解</button><button id="disassembly-back" type="button" hidden>上一级</button><h1>主要总成分解</h1><span id="disassembly-count"></span><button id="disassembly-list-toggle" type="button" aria-controls="disassembly-list" aria-expanded="false">总成清单</button></div>
+          <div class="disassembly-filters"><select id="disassembly-scope" aria-label="按系统查看零件"></select><input id="disassembly-search" type="search" placeholder="搜索零件或编号" aria-label="搜索分解零件" /><button id="disassembly-fit" type="button">复位视图</button></div>
+        </header>
+        <div id="disassembly-labels" aria-label="零件分组"></div>
+        <aside id="disassembly-list" hidden aria-label="分解零件清单"><header><strong>零件清单</strong><button id="disassembly-list-close" type="button" aria-label="收起零件清单">收起</button></header><div id="disassembly-list-items"></div><footer><button id="disassembly-list-prev" type="button">上一页</button><span id="disassembly-list-page"></span><button id="disassembly-list-next" type="button">下一页</button></footer></aside>
+        <div id="disassembly-busy" role="status">正在准备全部零件…</div>
+        <p id="disassembly-empty" hidden>没有找到匹配零件</p>
+        <aside id="disassembly-selection" hidden><div><strong></strong><small></small></div><div class="inspection-actions"><button id="disassembly-inspect-rotate" type="button" aria-pressed="true">旋转</button><button id="disassembly-inspect-pan" type="button" aria-pressed="false">平移</button><button id="disassembly-focus" type="button">居中</button><button id="disassembly-inspect-clear" type="button">返回分解</button></div></aside>
+        <footer class="disassembly-timeline">
+          <div class="disassembly-actions"><button id="disassembly-play" type="button">暂停动画</button><div role="group" aria-label="分解展示阶段"><button id="disassembly-assembled" type="button" aria-pressed="true">复原</button><button id="disassembly-exploded" type="button" aria-pressed="false">展开</button><button id="disassembly-flat" type="button" aria-pressed="false" hidden>平铺当前</button></div><span id="disassembly-stage">整机装配</span></div>
+          <label class="disassembly-progress" for="disassembly-progress"><span>分解进度</span><input id="disassembly-progress" type="range" min="0" max="100" value="0" /><output id="disassembly-progress-value">0%</output></label>
+          <div class="disassembly-caption"><p id="disassembly-hint">点击总成，单独展开内部零件</p></div>
+        </footer>
       </section>
 
       <footer class="telemetry surface-panel">

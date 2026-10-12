@@ -1,0 +1,76 @@
+.assembly-controls { display:flex; align-items:center; gap:12px; padding:9px 12px; border-top:1px solid #30414a; }
+.rotor-speed-control { display:grid; width:145px; gap:2px; }
+.rotor-speed-control label { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#adbfca; font-size:12px; }
+.rotor-speed-control b { color:#edf3f5; font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
+.rotor-speed-control small { font-size:10px; margin-left:5px; color:#9aafb9; font-weight:400; }
+#rotor-speed-slider { display:block; width:100%; min-width:0; margin:0; height:30px; accent-color:#e4c17a; cursor:ew-resize; touch-action:pan-y; }
+.assembly-controls>button { min-height:40px; padding:0 10px; border:1px solid #819bad; border-radius:5px; background:#223746; color:#eaf1f4; font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; }
+.assembly-controls button:disabled { opacity:.4; cursor:wait; }
+.assembly-controls button:focus-visible,#disassembly-page :focus-visible { outline:2px solid #e6c571; outline-offset:3px; }
+#disassembly-error { display:block; max-width:230px; padding:8px; font-size:12px; color:#ffb39a; }
+#app.disassembly-mode > :not(#viewer):not(#disassembly-page) { display:none!important; }
+#disassembly-page { position:absolute; inset:0; z-index:9; pointer-events:none; color:#e4edf4; font-family:inherit; }
+.disassembly-header { position:absolute; top:18px; left:20px; right:20px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; background:#0b1b27f7; border:1px solid #355060; border-radius:8px; pointer-events:auto; box-shadow:0 6px 24px #0003; }
+.disassembly-heading,.disassembly-filters { display:flex; align-items:center; gap:12px; min-width:0; }
+.disassembly-heading h1 { margin:0; font-size:20px; letter-spacing:.04em; }
+#disassembly-count { font-size:12px; color:#a5bccb; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#disassembly-page button { cursor:pointer; color:#dce8ee; border:1px solid #3c5667; background:#182d3c; border-radius:5px; min-height:40px; padding:0 13px; font-family:inherit; font-size:13px; white-space:nowrap; }
+#disassembly-page button:hover { background:#2b4353; }
+#disassembly-page button[aria-pressed="true"] { background:#c4aa6b; color:#122130; border-color:#e4c88a; }
+#disassembly-page button:disabled { opacity:.45; cursor:wait; }
+#disassembly-play { border-color:#b9a16d!important; color:#efdaa6!important; min-width:90px; }
+.disassembly-filters select,.disassembly-filters input { min-width:0; height:40px; border:1px solid #3c5667; border-radius:5px; color:#dce8ee; padding:0 10px; background:#112432; font-family:inherit; font-size:13px; }
+.disassembly-filters select { width:190px; }.disassembly-filters input { width:180px; }
+.disassembly-timeline { position:absolute; bottom:18px; left:50%; transform:translateX(-50%); width:min(680px,calc(100% - 40px)); padding:12px 16px 10px; border:1px solid #355060; border-radius:8px; background:#0b1b27f7; pointer-events:auto; }
+.disassembly-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.disassembly-actions [role="group"] { display:flex; gap:4px; }
+#disassembly-stage { color:#9fb6c5; font-size:12px; min-width:72px; text-align:right; }
+.disassembly-progress { display:grid; grid-template-columns:auto minmax(0,1fr) 40px; gap:12px; align-items:center; margin-top:10px; font-size:12px; color:#bfd0da; }
+.disassembly-progress input { width:100%; margin:0; accent-color:#e4c17a; cursor:pointer; }
+.disassembly-timeline p { margin:8px 0 0; color:#8ca4b3; font-size:11px; text-align:center; }
+.disassembly-caption { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:7px; }.disassembly-caption p { margin:0; }.disassembly-caption label { display:flex; align-items:center; gap:5px; color:#bfd0da; font-size:11px; white-space:nowrap; }.disassembly-caption input { accent-color:#e4c17a; }
+#disassembly-list { position:absolute; top:106px; right:20px; bottom:170px; width:270px; background:#0b1b27fa; border:1px solid #355060; border-radius:8px; pointer-events:auto; display:flex; flex-direction:column; overflow:hidden; }
+#disassembly-list header,#disassembly-list footer { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px; flex-shrink:0; font-size:13px; }
+#disassembly-list-items { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
+#disassembly-list-items button { display:grid; grid-template-columns:38px minmax(0,1fr); gap:3px 5px; width:100%; border:0; border-radius:0; border-top:1px solid #263d4c; background:transparent; padding:9px 10px; text-align:left; }
+#disassembly-list-items span { grid-row:1/3; color:#d6bc81; font-size:11px; }#disassembly-list-items strong { font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; }#disassembly-list-items small { color:#91aaba; font-size:11px; }
+#disassembly-labels { position:absolute; inset:0; overflow:hidden; }
+#disassembly-labels button { position:absolute; min-height:28px; padding:3px 8px; font-size:12px; color:#a8c4d6; background:#0f2232de; pointer-events:auto; transform:translateY(-100%); }
+#disassembly-busy,#disassembly-empty { position:absolute; left:50%; top:45%; transform:translate(-50%,-50%); padding:20px 28px; background:#0b1b27f5; border:1px solid #3c5667; border-radius:8px; text-align:center; }
+#disassembly-selection { position:absolute; display:flex; align-items:center; gap:10px; pointer-events:auto; bottom:168px; left:50%; transform:translateX(-50%); max-width:calc(100% - 30px); padding:8px 14px; font-size:13px; border-left:3px solid #e3bc6e; border-radius:4px; background:#182d3cef; color:#f6e3b9; }
+#disassembly-selection strong,#disassembly-selection small { display:block; }#disassembly-selection small { color:#c1d1db; font-size:12px; margin-top:5px; max-width:420px; }
+.inspection-actions { display:flex; gap:5px; }#disassembly-labels button { max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:900px),(pointer:coarse) and (max-width:1400px) {
+  .control-deck.transmission-control { width:212px; }
+  .control-deck .transmission-toggle { min-height:40px; padding:7px 10px; font-size:12px; }
+  .assembly-controls { gap:7px; padding:6px; }.rotor-speed-control { gap:2px; width:125px; }
+  .rotor-speed-control label { font-size:10px; }.rotor-speed-control b { font-size:13px; }.rotor-speed-control small { font-size:9px; margin-left:3px; }
+  .assembly-controls>button { min-height:44px; padding:0 7px; font-size:11px; }
+  .alarm-banner { top:calc(114px + env(safe-area-inset-top)); }
+  .demo-alarm-active .assembly-controls { display:none; }
+  .demo-alarm-active .alarm-banner { top:calc(66px + env(safe-area-inset-top)); }
+  .disassembly-header { top:calc(8px + env(safe-area-inset-top)); left:8px; right:8px; padding:10px; gap:9px; }
+  .disassembly-heading { width:100%; gap:8px; }.disassembly-heading h1 { font-size:16px; }#disassembly-count { margin-left:auto; font-size:10px; }
+  .disassembly-filters { width:100%; gap:6px; }.disassembly-filters select,.disassembly-filters input { width:0; flex:1; font-size:16px; }
+  #disassembly-page button { min-height:44px; padding:0 9px; font-size:12px; }
+  .disassembly-timeline { bottom:calc(8px + env(safe-area-inset-bottom)); width:calc(100% - 16px); padding:8px; }
+  .disassembly-actions { gap:6px; }.disassembly-actions [role="group"] { flex:1; gap:3px; justify-content:flex-end; }
+  #disassembly-stage { display:none; }#disassembly-play { min-width:76px; }
+  .disassembly-timeline p { font-size:10px; }.disassembly-progress { gap:7px; margin-top:7px; }
+  #disassembly-selection { bottom:150px; font-size:12px; }
+  #disassembly-selection { width:calc(100% - 16px); max-width:650px; flex-wrap:wrap; justify-content:space-between; padding:8px; }.inspection-actions { flex:1; justify-content:flex-end; }
+  #disassembly-list { top:auto; bottom:150px; left:8px; right:8px; width:auto; height:min(32dvh,270px); }
+  .disassembly-heading { flex-wrap:wrap; }#disassembly-list-toggle { margin-left:auto; }
+  .disassembly-caption p { font-size:9px; text-align:right; }
+}
+@media (max-width:600px) {
+  .disassembly-heading { flex-wrap:nowrap; }.disassembly-heading h1 { min-width:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #disassembly-count { display:none; }
+}
+@media (min-width:600px) and (max-height:600px) {
+  .disassembly-header { flex-wrap:nowrap; }.disassembly-heading { width:auto; flex-shrink:0; }.disassembly-filters { max-width:430px; }
+  .disassembly-timeline { padding:6px 10px; }.disassembly-timeline p { display:none; }.disassembly-progress { margin-top:3px; }
+  .disassembly-actions button { min-height:34px!important; }.disassembly-header #disassembly-count { display:none; }
+  #disassembly-selection { bottom:106px; }
+  #disassembly-list { top:76px; bottom:116px; left:auto; right:8px; width:240px; height:auto; }.disassembly-heading { flex-wrap:nowrap; }
+}
