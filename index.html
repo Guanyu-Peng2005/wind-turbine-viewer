@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#16232c" />
     <meta name="description" content="风机机舱内部传动链透视运动演示" />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23007e8c'/%3E%3Ccircle cx='32' cy='32' r='5' fill='white'/%3E%3Cpath d='M30 27 31 8c8 0 12 5 8 12l-5 8M27 34 10 44c-4-7-1-13 7-13l10 1M37 35l17 10c-4 7-12 7-15 1l-5-9' fill='white'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%2316232c'/%3E%3Ccircle cx='32' cy='32' r='5' fill='white'/%3E%3Cpath d='M30 27 31 8c8 0 12 5 8 12l-5 8M27 34 10 44c-4-7-1-13 7-13l10 1M37 35l17 10c-4 7-12 7-15 1l-5-9' fill='white'/%3E%3C/svg%3E" />
     <title>风机机舱 · 传动链透视演示</title>
   </head>
   <body>
@@ -13,7 +13,7 @@
       <canvas id="viewer" aria-label="风机三维模型查看器"></canvas>
       <header class="workbench-header">
         <div class="workbench-identity">
-          <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="14" r="3"/><path d="m16 11 1-8c5 0 6 3 2 7m-6 5-7 4c-3-4-1-7 5-6m7 3 6 5c-2 4-6 3-7-2M16 17v12M11 29h10"/></svg>
+          <i data-ui-icon="Wind"></i>
           <h1>风机结构</h1>
         </div>
         <span class="workbench-context">装配视图</span>
@@ -63,10 +63,11 @@
 
       <button id="inspector-toggle" class="inspector-toggle surface-panel" type="button" aria-controls="inspector" aria-expanded="false">零件面板</button>
       <aside id="inspector" class="inspector surface-panel" aria-label="主要零件树" data-mobile-open="false">
+        <header class="inspector-heading"><h2 id="inspector-heading-title">模型浏览器</h2><button id="inspector-close" type="button" aria-label="收起零件面板" title="收起面板"><i data-ui-icon="PanelRightClose"></i></button></header>
         <div class="inspector-tabs" role="tablist" aria-label="工程信息">
-          <button id="parts-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="parts-inspector-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v5H3Zm9 9h5v5h-5ZM5 8v6h7M12 3h5v5h-5Z"/></svg><span>零件树</span></button>
-          <button id="annotations-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-label="标注记录" aria-controls="annotation-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 3H3v14h14v-8M8 12l1-4 6-6 3 3-6 6Z"/></svg><span>标注</span><b id="annotation-count">0</b></button>
-          <button id="sensors-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-label="实时监测" aria-controls="sensor-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h4l2-6 4 12 2-6h4M3 3v14h14"/></svg><span>监测</span><b id="sensor-alarm-count" hidden>0</b></button>
+          <button id="parts-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="parts-inspector-panel"><i data-ui-icon="ListTree"></i><span>零件树</span></button>
+          <button id="annotations-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-label="标注记录" aria-controls="annotation-panel"><i data-ui-icon="MessageSquareText"></i><span>标注</span><b id="annotation-count">0</b></button>
+          <button id="sensors-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-label="实时监测" aria-controls="sensor-panel"><i data-ui-icon="Activity"></i><span>监测</span><b id="sensor-alarm-count" hidden>0</b></button>
         </div>
 
         <section class="inspector-tab-panel parts-inspector-panel" id="parts-inspector-panel" role="tabpanel" aria-labelledby="parts-tab">
@@ -206,22 +207,7 @@
         </section>
       </aside>
 
-      <nav class="viewer-toolbar surface-panel" aria-label="三维导航工具">
-        <div class="navigation-modes" role="group" aria-label="视角操作模式">
-        <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><ellipse cx="12" cy="12" rx="4.5" ry="10" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="1"/></svg><span>旋转</span></button>
-        <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span>平移</span></button>
-        </div>
-        <i aria-hidden="true"></i>
-        <button id="navigation-reset" type="button" title="复位视角"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/><path d="m9 10 3-2 3 2v5l-3 2-3-2Z"/></svg><span>复位视角</span></button>
-        <i aria-hidden="true"></i>
-        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console" title="报警点位"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z"/><path d="M12 7v4m0 3h.01"/></svg><span>报警点位</span></button>
-        <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-4-4L5 15Z"/></svg><span>添加标注</span></button>
-        <section id="point-alarm-console" class="point-alarm-console alarm-console" aria-label="报警点位演示" hidden>
-          <label class="sr-only" for="point-alarm-source">选择演示告警测点</label>
-          <select id="point-alarm-source" disabled></select>
-          <button id="point-alarm-send" type="button" disabled>发送演示告警</button>
-        </section>
-      </nav>
+
 
       <nav class="view-dock surface-panel" aria-label="相机视图" hidden>
         <button class="view-button active" data-view="overview" type="button">
@@ -263,6 +249,9 @@
 
       </div>
 
+
+
+      <div class="workspace-dock" role="group" aria-label="模型操作台">
       <section class="control-deck transmission-control surface-panel" aria-label="传动结构展示">
         <label class="transmission-toggle" title="内部为典型传动结构示意，未经厂家参数验证。"><input id="show-internals" type="checkbox" disabled /><span>传动结构透视</span></label>
         <div class="assembly-controls">
@@ -270,10 +259,27 @@
             <label for="rotor-speed-slider"><span>叶轮转速</span><b><output id="rotor-speed-value">10.0</output><small>转/分</small></b></label>
             <input id="rotor-speed-slider" type="range" min="0" max="20" step="0.5" value="10" aria-label="叶轮演示转速" aria-valuetext="10.0 转每分" title="左右拖动调速，调至零停止" disabled />
           </div>
-          <button id="disassembly-open" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg><span>零件分解</span></button>
+          <button id="disassembly-open" type="button" disabled><i data-ui-icon="Layers"></i><span>零件分解</span></button>
         </div>
         <span id="disassembly-error" role="alert" hidden></span>
       </section>
+      <nav class="viewer-toolbar surface-panel" aria-label="三维导航工具">
+        <div class="navigation-modes" role="group" aria-label="视角操作模式">
+        <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><i data-ui-icon="Orbit"></i><span>旋转</span></button>
+        <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><i data-ui-icon="Move"></i><span>平移</span></button>
+        </div>
+        <i aria-hidden="true"></i>
+        <button id="navigation-reset" type="button" title="复位视角"><i data-ui-icon="RotateCcw"></i><span>复位视角</span></button>
+        <i aria-hidden="true"></i>
+        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console" title="报警点位"><i data-ui-icon="MapPin"></i><span>报警点位</span></button>
+        <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注"><i data-ui-icon="PencilLine"></i><span>添加标注</span></button>
+        <section id="point-alarm-console" class="point-alarm-console alarm-console" aria-label="报警点位演示" hidden>
+          <label class="sr-only" for="point-alarm-source">选择演示告警测点</label>
+          <select id="point-alarm-source" disabled></select>
+          <button id="point-alarm-send" type="button" disabled>发送演示告警</button>
+        </section>
+      </nav>
+      </div>
 
       <section id="disassembly-page" aria-label="零件爆炸分解与平铺" hidden>
         <header class="disassembly-header">

@@ -18,7 +18,7 @@ import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
 import { normalizeRotorSpeed } from './rotor-speed';
-import { partIcon, wireWorkbenchKeyboard } from './workbench-ui';
+import { partIcon, treeChevron, initializeWorkbenchIcons, wireWorkbenchKeyboard } from './workbench-ui';
 import { DisassemblyView, type DisassemblySource } from './disassembly-view';
 import { brakeDisplayVariants } from './brake-representation';
 import './style.css';
@@ -27,6 +27,7 @@ import './responsive.css';
 import './alarm-presentation.css';
 import './disassembly.css';
 import './workbench.css';
+initializeWorkbenchIcons();
 
 type DisplayMode = 'solid' | 'xray' | 'section';
 type PartRole = 'shell' | 'auxiliary' | 'internal';
@@ -401,6 +402,7 @@ const inspector = byId<HTMLElement>('inspector');
 const inspectorToggle = byId<HTMLButtonElement>('inspector-toggle');
 const compactViewport = window.matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1400px)');
 let mobileInspectorOpen = false;
+let desktopInspectorCollapsed = false;
 let desktopUiScale = 1;
 const partsTab = byId<HTMLButtonElement>('parts-tab');
 const annotationsTab = byId<HTMLButtonElement>('annotations-tab');
@@ -1474,11 +1476,13 @@ function presentationFrame():PresentationFrame{
   const compact=compactViewport.matches,margin=compact?12:24*desktopUiScale,left=margin;
   const header=document.querySelector<HTMLElement>('.workbench-header')!.getBoundingClientRect();
   const simulationControls=document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect();
-  let top=Math.max(header.bottom,simulationControls.bottom)-canvasRect.top+margin;
+  let top=header.bottom-canvasRect.top+margin;
+  if(simulationControls.height&&simulationControls.top<canvasRect.top+viewportHeight*.5)top=Math.max(top,simulationControls.bottom-canvasRect.top+margin);
   if(!alarmBanner.hidden)top=Math.max(top,alarmBanner.getBoundingClientRect().bottom-canvasRect.top+margin);
   let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-(compact?20:20*desktopUiScale));
+  if(simulationControls.height&&simulationControls.top>=canvasRect.top+viewportHeight*.5)bottom=Math.min(bottom,simulationControls.top-canvasRect.top-margin);
   if(!pointAlarmConsole.hidden)bottom=Math.min(bottom,pointAlarmConsole.getBoundingClientRect().top-canvasRect.top-margin);
-  if(!compact||mobileInspectorOpen){
+  if(panel.width&&panel.height&&(!compact||mobileInspectorOpen)){
     if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
     else bottom=Math.min(bottom,panel.top-canvasRect.top-margin);
   }
@@ -1489,11 +1493,12 @@ function setMobileInspectorOpen(open:boolean):void{
   updateDesktopProportions();
   mobileInspectorOpen=open;
   inspector.dataset.mobileOpen=String(open);
-  const collapsed=compactViewport.matches&&!open;
+  const collapsed=compactViewport.matches?!open:desktopInspectorCollapsed;
+  byId('app').classList.toggle('inspector-collapsed',!compactViewport.matches&&collapsed);
   inspector.inert=collapsed;
   if(collapsed)inspector.setAttribute('aria-hidden','true');else inspector.removeAttribute('aria-hidden');
   inspectorToggle.setAttribute('aria-expanded',String(!collapsed));
-  inspectorToggle.textContent=open?'收起面板':'零件面板';
+  inspectorToggle.textContent=collapsed?'零件面板':'收起面板';
   updatePointAlarmConsole();
   if(collapsed&&inspector.contains(document.activeElement))inspectorToggle.focus({preventScroll:true});
   requestAnimationFrame(()=>{
@@ -1922,10 +1927,12 @@ function setAnnotationMode(active: boolean): void {
 }
 
 function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors',reveal=true): void {
+  if(reveal&&!compactViewport.matches&&desktopInspectorCollapsed){desktopInspectorCollapsed=false;setMobileInspectorOpen(mobileInspectorOpen);}
   if(reveal&&compactViewport.matches&&!mobileInspectorOpen)setMobileInspectorOpen(true);
   const showParts = tab === 'parts';
   const showAnnotations = tab === 'annotations';
   const showSensors = tab === 'sensors';
+  byId('inspector-heading-title').textContent=showParts?'模型浏览器':showAnnotations?'标注记录':'设备监测';
   partsInspectorPanel.hidden = !showParts;
   annotationPanel.hidden = !showAnnotations;
   sensorPanel.hidden = !showSensors;
@@ -2717,7 +2724,7 @@ function renderPartList(query = ''): void {
     const heading=document.createElement('button');heading.type='button';heading.className='tree-group-toggle';
     heading.setAttribute('role','treeitem');heading.setAttribute('aria-level','1');heading.tabIndex=-1;
     heading.dataset.treeKey=`group-${groupIndex}`;heading.id=`part-group-${groupIndex}`;
-    heading.innerHTML='<svg class="tree-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg><span></span><b></b>';
+    heading.innerHTML=treeChevron()+'<span></span><b></b>';
     heading.querySelector('span')!.textContent=group.label;heading.querySelector('b')!.textContent=String(filtered.length);
     const children=document.createElement('div');children.className='tree-group-items';children.id=`part-group-items-${groupIndex}`;
     children.setAttribute('role','group');children.setAttribute('aria-labelledby',heading.id);
@@ -2803,7 +2810,8 @@ function setOrbitPivotFromPointer(event: MouseEvent): void {
 }
 
 search.addEventListener('input', () => renderPartList(search.value));
-inspectorToggle.addEventListener('click',()=>setMobileInspectorOpen(!mobileInspectorOpen));
+inspectorToggle.addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=false;setMobileInspectorOpen(!mobileInspectorOpen);});
+byId('inspector-close').addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=true;setMobileInspectorOpen(false);inspectorToggle.focus({preventScroll:true});});
 compactViewport.addEventListener('change',()=>setMobileInspectorOpen(mobileInspectorOpen));
 setMobileInspectorOpen(false);
 partsTab.addEventListener('click', () => setAnnotationPanelOpen(false));

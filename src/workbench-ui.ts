@@ -1,23 +1,19 @@
-/** Small, authored engineering symbols. They communicate component type rather
- * than repeating a generic cube for every assembly. All SVG content is static. */
-const symbols: Record<string, string> = {
-  '轮毂总成': '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 4v3m7 9-3-2M5 16l3-2"/>',
-  '叶片': '<circle cx="12" cy="11" r="2"/><path d="m12 9 1-7c5 0 5 4 1 7m-4 3-6 4c-3-4 0-6 5-5m5 2 6 4c-2 4-6 2-7-3"/>',
-  '主轴组件': '<ellipse cx="5" cy="12" rx="2" ry="6"/><path d="M5 6h14c3 0 3 12 0 12H5m0-9h15M5 15h15"/>',
-  '主轴承': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M6 6l2 2m8 8 2 2m0-12-2 2M6 18l2-2"/>',
-  '齿轮箱': '<path d="m9 3-1 3-3-1-2 4 2 3-2 3 2 4 3-1 1 3h6l1-3 3 1 2-4-2-3 2-3-2-4-3 1-1-3Z"/><circle cx="12" cy="12" r="3.5"/>',
-  '高速轴制动器': '<circle cx="11" cy="12" r="8"/><circle cx="11" cy="12" r="3"/><path d="M17 6h4v12h-4M7 6l1 2m-4 5h3m8 4-2-2"/>',
-  '高速轴联轴器': '<path d="M2 12h4m12 0h4M6 6h4v12H6Zm8 0h4v12h-4ZM10 9h4m-4 6h4"/>',
-  '发电机': '<path d="M5 5h13l3 3v9H5Z M2 10h3m-3 4h3M8 5v12m3-12v12m3-12v12m3-12v12M7 17v3m11-3v3M5 20h15"/>',
-  '主机架': '<path d="M3 6h18v4H3Zm0 8h18v4H3ZM6 10v4m12-4v4M3 18v3m18-3v3"/>',
-  '液压系统': '<path d="M4 10h16v11H4ZM8 10V5h8v5M12 5V2m-5 13h10"/><path d="M12 11c0 0-3 3-3 5a3 3 0 0 0 6 0c0-2-3-5-3-5"/>',
-  '辅助变压器': '<path d="M2 5h3v14H2m20-14h-3v14h3M8 5c5 0 5 4 0 4 5 0 5 4 0 4 5 0 5 4 0 4m8-12c-5 0-5 4 0 4-5 0-5 4 0 4-5 0-5 4 0 4"/>',
-  '偏航系统': '<ellipse cx="12" cy="13" rx="9" ry="5"/><path d="M3 13v4c0 6 18 6 18 0v-4M7 5a9 4 0 0 1 12 1m-1-4 1 4-4 1M8 13h8"/>',
-  '机舱外壳': '<path d="M3 7h14l4 5v7H3Zm0 0 4-3h10l4 8M3 12h18M7 4v3"/>',
-};
+import { createElement, createIcons, Wind, Fan, CircleDot, Cylinder, Cog, Disc, Link2, Zap, PanelsTopLeft, Droplets, Package, Orbit, Move, RotateCcw, MapPin, PencilLine, ListTree, Activity, ChevronRight, PanelRightClose, Layers, MessageSquareText, type IconNode } from 'lucide';
 
-export function partIcon(label: string): string {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${symbols[label] ?? '<path d="m12 3 9 5v9l-9 5-9-5V8Zm-9 5 9 5 9-5m-9 5v9"/>'}</svg>`;
+const symbols: Record<string, IconNode> = {
+  '轮毂总成': CircleDot, '叶片': Fan, '主轴组件': Cylinder, '主轴承': CircleDot,
+  '齿轮箱': Cog, '高速轴制动器': Disc, '高速轴联轴器': Link2, '发电机': Zap,
+  '主机架': PanelsTopLeft, '液压系统': Droplets, '辅助变压器': Zap, '偏航系统': Orbit, '机舱外壳': Package,
+};
+const iconCache=new Map<string,string>();
+export function partIcon(label:string):string {
+  let svg=iconCache.get(label);
+  if(!svg){svg=createElement(symbols[label]??Package,{'aria-hidden':'true','stroke-width':1.5}).outerHTML;iconCache.set(label,svg);}
+  return svg;
+}
+export function treeChevron():string { return createElement(ChevronRight,{'aria-hidden':'true','class':'tree-chevron','stroke-width':1.5}).outerHTML; }
+export function initializeWorkbenchIcons():void {
+  createIcons({icons:{Wind,Orbit,Move,RotateCcw,MapPin,PencilLine,ListTree,Activity,PanelRightClose,Layers,MessageSquareText},nameAttr:'data-ui-icon',attrs:{'aria-hidden':'true','stroke-width':1.6}});
 }
 
 /** Follow native tab/tree keyboard conventions without capturing canvas keys. */

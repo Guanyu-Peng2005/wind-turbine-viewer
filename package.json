@@ -11,6 +11,7 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "lucide": "^1.59.0",
     "three": "^0.185.1",
     "three-mesh-bvh": "0.9.15"
   },

@@ -1,367 +1,315 @@
-/* Graphite workbench. One presentation layer shared by overview, inspection,
-   monitoring and disassembly; scene materials and engineering state stay separate.
-   Reference principles (not component dependencies or a compliance claim):
-   https://ix.siemens.io/docs/guidelines/overview
-   https://www.carbondesignsystem.com/building-blocks/foundations/spacing/overview
-   https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html */
+/* Model-first workspace: Spline's restrained inspector and Speckle's grouped toolbelt.
+   Sources: https://docs.spline.design/basics/understanding-splines-ui
+   https://speckle.systems/updates/redesigned-3d-web-viewer/
+   UI surfaces stay opaque enough for legibility without per-frame backdrop blur. */
 :root {
-  --ui-paper: #16232c;
-  --ui-surface: #1e2d38;
-  --ui-soft: #263642;
-  --ui-line: #33434f;
-  --ui-ink: #e2e8ed;
-  --ui-muted: #a4b2be;
-  --ui-blue: #a5bdd0;
-  --ui-blue-soft: #273c4c;
-  --ui-gold: #c6ac75;
-  --ui-gold-soft: #39352b;
-  --ui-danger: #ee9b8b;
-  --ui-rail: 320px;
-  --ui-header: 64px;
-  --ui-recess: #111e27;
-  --ui-highlight: #ffffff09;
-  --ui-floating-shadow: 0 10px 30px #0004, inset 0 1px var(--ui-highlight);
-  --ink: var(--ui-ink);
-  --muted: var(--ui-muted);
-  --line: var(--ui-line);
-  --cyan: var(--ui-blue);
-  --cyan-dark: var(--ui-blue);
-  font-family: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-  color-scheme: dark;
+  --ui-paper:#16232c; --ui-surface:#1e2d38; --ui-soft:#263642;
+  --ui-line:#ffffff12; --ui-ink:#e2e8ed; --ui-muted:#a4b2be;
+  --ui-blue:#a5bdd0; --ui-blue-soft:#273c4c; --ui-gold:#c6ac75;
+  --ui-gold-soft:#39352b; --ui-danger:#ee9b8b; --ui-rail:312px;
+  --ui-panel:#14212af7; --scene-right:calc(var(--ui-rail) + 48px);
+  --dock-settings-height:64px; --ink:var(--ui-ink); --muted:var(--ui-muted);
+  --line:var(--ui-line); --cyan:var(--ui-blue); --cyan-dark:var(--ui-blue);
+  font-family:"PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  color-scheme:dark;
 }
-.workbench { color: var(--ui-ink); font-size: 14px; }
-#app.workbench { background: #020c13; }
-#app.workbench::before { display: none; }
-.workbench :is(button,input,select,textarea) { font-family: inherit; }
-.workbench select option { color: var(--ui-ink); background: var(--ui-surface); }
-.workbench button { transition: background-color 160ms, border-color 160ms, color 160ms; }
-.workbench button:active:not(:disabled) { box-shadow: inset 0 1px 4px #0003; }
-.workbench :is(button,input,select,textarea):focus-visible { outline: 2px solid var(--ui-blue); outline-offset: 3px; }
-.workbench :is(button,input,select,textarea):disabled { opacity: .42; }
-.workbench .surface-panel { backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; }
-.workbench > :is(.inspector,.viewer-toolbar,.transmission-control,.generator-guide,.alarm-banner) { zoom: 1; }
-.workbench :is(.part-results,.parts-inspector-panel,.sensor-list,.sensor-detail,.annotation-panel,.part-relations) { scrollbar-color: #536876 transparent; scrollbar-width: thin; scrollbar-gutter: stable; }
+#app.workbench { background:#020c13; color:var(--ui-ink); font-size:14px; }
+#app.workbench::before { display:none; }
+.workbench :is(button,input,select,textarea) { font-family:inherit; }
+.workbench button { transition:background-color 140ms,color 140ms,border-color 140ms; }
+.workbench button:active:not(:disabled) { filter:brightness(.92); }
+.workbench :is(button,input,select,textarea):focus-visible { outline:2px solid var(--ui-blue); outline-offset:3px; }
+.workbench select option { background:var(--ui-surface); color:var(--ui-ink); }
+.workbench .surface-panel { backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:none; }
+.workbench > :is(.inspector,.generator-guide,.alarm-banner) { zoom:1; }
+.workbench :is(.parts-inspector-panel,.part-results,.sensor-list,.sensor-detail,.annotation-panel,.part-relations) { scrollbar-width:thin; scrollbar-color:#4b5c68 transparent; }
+.workbench svg { flex-shrink:0; }
 
-/* A continuous, quiet command bar frames the 3D canvas. */
-.workbench-header {
-  position: absolute; inset: 0 0 auto; z-index: 4; height: var(--ui-header);
-  display: flex; align-items: center; gap: 18px; padding: 0 24px;
-  background: var(--ui-paper); border-bottom: 1px solid var(--ui-line); box-shadow: inset 0 1px var(--ui-highlight);
-}
-.workbench-identity { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
-.workbench-identity svg { width: 32px; height: 32px; padding: 3px; border: 1px solid var(--ui-line); border-radius: 7px; background: var(--ui-surface); fill: none; stroke: var(--ui-blue); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.workbench-identity h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: .04em; }
-.workbench-context { padding-left: 18px; border-left: 1px solid var(--ui-line); font-size: 12px; color: var(--ui-muted); }
-.workbench-note { margin-left: auto; padding: 5px 8px; border: 1px solid var(--ui-line); border-radius: 4px; color: var(--ui-muted); font-size: 11px; letter-spacing: .04em; }
-.workbench .control-deck.transmission-control {
-  z-index: 5; top: 6px; bottom: auto; left: max(288px,calc((100% - var(--ui-rail))/2 - 252px)); right: auto; width: auto;
-  min-height: 50px; display: flex; align-items: center; gap: 16px; padding: 4px 5px 4px 16px;
-  background: var(--ui-recess); border: 1px solid var(--ui-line); border-radius: 7px; transform: none;
-  box-shadow: inset 0 1px 3px #0002;
-}
-.workbench .transmission-toggle { min-height: 40px; padding: 0; gap: 9px; font-size: 13px; color: var(--ui-ink); font-weight: 500; white-space: nowrap; }
-.workbench .transmission-toggle input { appearance: none; position: relative; width: 18px; height: 18px; border: 1.5px solid #8093a3; border-radius: 4px; background: var(--ui-surface); }
-.workbench .transmission-toggle input:checked { background: #536f84; border-color: #a5bdd0; }
-.workbench .transmission-toggle input:checked::after { content: ""; position: absolute; width: 8px; height: 4px; top: 4px; left: 3px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg); }
-.workbench .transmission-toggle:has(input:checked) { color: var(--ui-blue); }
-.workbench .assembly-controls { display: flex; align-items: center; gap: 16px; padding: 0 0 0 16px; border-top: 0; border-left: 1px solid var(--ui-line); }
-.workbench .rotor-speed-control { width: 190px; gap: 0; }
-.workbench .rotor-speed-control label { font-size: 11px; color: var(--ui-muted); }
-.workbench .rotor-speed-control b { display: inline-flex; align-items: baseline; min-width: 67px; justify-content: flex-end; font-family: Bahnschrift, "Microsoft YaHei UI", sans-serif; color: var(--ui-ink); font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.workbench .rotor-speed-control small { color: var(--ui-muted); font-family: inherit; font-size: 10px; }
-.workbench #rotor-speed-slider { --speed-position: 50%; appearance: none; height: 24px; background: transparent; cursor: ew-resize; accent-color: var(--ui-blue); }
-.workbench #rotor-speed-slider::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(to right,var(--ui-blue) var(--speed-position),#425564 var(--speed-position)); border-radius: 4px; }
-.workbench #rotor-speed-slider::-webkit-slider-thumb { appearance: none; width: 12px; height: 16px; margin-top: -6.5px; border-radius: 3px; background: #c3d0d9; border: 1px solid #e2e8ed; box-shadow: 0 1px 4px #0007; }
-.workbench #rotor-speed-slider::-moz-range-track { height: 3px; background: linear-gradient(to right,var(--ui-blue) var(--speed-position),#425564 var(--speed-position)); }
-.workbench #rotor-speed-slider::-moz-range-thumb { width: 11px; height: 11px; border-radius: 50%; background: var(--ui-blue); border: 2px solid var(--ui-paper); box-shadow: 0 0 0 1px var(--ui-blue); }
-.workbench #disassembly-open { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px; border: 1px solid #d4bd89; border-radius: 5px; background: linear-gradient(#cfb780,#bea36b); color: #1c252b; font-size: 13px; font-weight: 600; box-shadow: inset 0 1px #fff3,0 2px 4px #0003; }
-.workbench #disassembly-open:hover:not(:disabled) { background: #dfc797; border-color: #dfc797; }
-.workbench :is(#disassembly-open,.viewer-toolbar button) svg { flex-shrink: 0; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.workbench #disassembly-error { position: absolute; top: 100%; right: 0; max-width: 280px; padding: 12px; border-radius: 6px; background: #3b292b; color: var(--ui-danger); }
+/* Identity is local to the canvas; there is no full-width application slab. */
+.workbench-header { position:absolute; z-index:4; top:24px; left:24px; display:grid; grid-template-columns:34px auto; align-items:center; column-gap:12px; row-gap:4px; padding:10px 14px; border:0; border-radius:10px; background:#07131be8; pointer-events:none; }
+.workbench-identity { display:contents; }
+.workbench-identity svg { grid-column:1; grid-row:1/3; width:32px; height:32px; color:var(--ui-blue); }
+.workbench-identity h1 { grid-column:2; grid-row:1; margin:0; font-size:22px; font-weight:600; letter-spacing:.04em; line-height:1.35; }
+.workbench-context { grid-column:2; grid-row:2; color:var(--ui-muted); font-size:11px; letter-spacing:.12em; }
+.workbench-note { display:none; }
 
-/* The information rail uses typography and spacing instead of nested boxes. */
-.workbench .inspector {
-  top: var(--ui-header); right: 0; bottom: 0; left: auto; width: var(--ui-rail);
-  min-height: 0; padding: 16px; border: 0; border-left: 1px solid var(--ui-line);
-  border-radius: 0; color: var(--ui-ink); background: var(--ui-paper); animation: none;
-}
-.workbench .inspector::after { display: none; }
-.workbench .inspector-tabs { flex-shrink: 0; margin: 0; padding: 3px; gap: 3px; border: 1px solid #30414e; border-radius: 7px; background: var(--ui-recess); box-shadow: inset 0 1px 3px #0002; }
-.workbench .inspector-tabs button { display: flex; align-items: center; justify-content: center; gap: 6px; height: 36px; min-height: 36px; padding: 0 5px; border: 1px solid transparent; border-radius: 4px; color: var(--ui-muted); font-size: 12px; white-space: nowrap; }
-.workbench .inspector-tabs button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
-.workbench .inspector-tabs button:hover { color: var(--ui-ink); background: #263642; }
-.workbench .inspector-tabs button.active { color: #dce8f1; background: #293c4b; border-color: #435b6d; font-weight: 600; box-shadow: inset 0 1px #ffffff0a,0 1px 3px #0003; }
-.workbench .inspector-tabs button b { min-width: 16px; height: 16px; padding: 0 4px; margin-left: 3px; font: 10px/16px Bahnschrift,sans-serif; color: var(--ui-muted); background: var(--ui-soft); border: 0; border-radius: 4px; }
-.workbench .inspector .search-box { grid-template-columns: 18px minmax(0,1fr); flex-shrink: 0; height: 38px; min-height: 38px; margin-top: 16px; padding: 0 10px; gap: 8px; border: 1px solid var(--ui-line); border-radius: 5px; background: var(--ui-recess); box-shadow: inset 0 1px 2px #0002; }
-.workbench .inspector .search-box:focus-within { border-color: var(--ui-blue); box-shadow: 0 0 0 2px #48668018; }
-.workbench .inspector .search-box input { font-size: 13px; color: var(--ui-ink); }
-.workbench .inspector .search-box input::placeholder,.workbench .inspector .search-box svg { color: var(--ui-muted); }
-.workbench .assembly-summary { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; margin: 20px 4px 8px; padding-bottom: 10px; border-bottom: 1px solid var(--ui-line); font-size: 12px; }
-.workbench .assembly-summary b { color: var(--ui-muted); font-weight: 400; font-size: 11px; font-variant-numeric: tabular-nums; }
-.workbench .inspector .part-results { border: 0; margin-top: 0; padding: 0 2px 12px 0; min-height: 100px; }
-.workbench .inspector .tree-group { padding: 4px 0 8px; }
-.workbench .inspector .tree-group + .tree-group { border-top: 0; margin-top: 8px; }
-.workbench .tree-group-toggle { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 8px; border: 0; border-radius: 4px; color: var(--ui-muted); background: transparent; font-size: 11px; font-weight: 500; cursor: pointer; text-align: left; }
-.workbench .tree-group-toggle:hover { color: var(--ui-ink); background: var(--ui-surface); }
-.workbench .tree-group-toggle b { margin-left: auto; min-width: 18px; text-align: center; font: 11px Bahnschrift,sans-serif; color: #a0b2c0; }
-.workbench .tree-chevron { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms; }
-.workbench .tree-group-toggle[aria-expanded="true"] .tree-chevron { transform: rotate(90deg); }
-.workbench .tree-group-items { margin-left: 13px; padding-left: 7px; border-left: 1px solid #334652; }
-.workbench .inspector .part-row { min-height: 40px; padding: 8px 9px; grid-template-columns: 18px minmax(0,1fr) 12px; gap: 10px; border: 1px solid transparent; border-radius: 4px; color: #c9d4dd; animation: none; opacity: 1; }
-.workbench .inspector .part-row strong { font-size: 13px; font-weight: 500; line-height: 1.6; color: inherit; letter-spacing: 0; }
-.workbench .inspector .part-row:hover { color: var(--ui-ink); background: var(--ui-soft); }
-.workbench .inspector .part-row.active { color: #edf3f7; background: var(--ui-blue-soft); border-color: #3c5568; box-shadow: inset 2px 0 var(--ui-gold); }
-.workbench .tree-node::before { display: none; }
-.workbench .tree-node svg { width: 18px; height: 18px; fill: none; stroke: #90a9bb; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
-.workbench .part-row.active .tree-node svg { stroke: #cfb780; }
-.workbench .inspector .visibility { color: #92a4b2; font-size: 12px; }
-.workbench .inspector .part-row.active .visibility { color: var(--ui-blue); }
-.workbench .inspector .selected-card { margin-top: 8px; padding: 12px; gap: 8px; grid-template-columns: minmax(0,1fr) auto; border: 1px solid #3c5263; border-left: 2px solid var(--ui-gold); border-radius: 5px; background: var(--ui-surface); }
-.workbench .inspector .selected-caption { display: block; margin-bottom: 4px; color: var(--ui-muted); font-size: 10px; }
-.workbench .inspector .selected-card strong { font-size: 14px; color: var(--ui-ink); font-weight: 600; }
-.workbench #clear-part-focus { grid-column: auto; height: 32px; margin: 0; padding: 0 6px; border: 0; color: var(--ui-blue); background: transparent; font-size: 11px; }
-.workbench #clear-part-focus:hover { background: #354e61; color: var(--ui-ink); }
-.workbench .inspector .part-relations { margin: 10px 0 16px; padding: 12px; border: 1px solid var(--ui-line); border-radius: 5px; background: var(--ui-recess); max-height: min(40dvh,360px); }
-.workbench .inspector .part-relations h3 { font-size: 12px; color: var(--ui-ink); font-weight: 600; }
-.workbench .inspector .relation-legend { font-size: 10px; gap: 9px; margin: 12px 0 8px; }
-.workbench .relation-legend .current { color: #ced8e0; }
-.workbench .relation-legend .upstream,.workbench .relation-columns .upstream h4 { color: #bdcba0; }
-.workbench .relation-legend .downstream,.workbench .relation-columns .downstream h4 { color: #dfc58d; }
-.workbench .relation-legend .related,.workbench .inspector .relation-associated h4 { color: #d0b8df; }
-.workbench .inspector .part-relations button { min-height: 32px; font-size: 11px; padding: 6px 7px; border-radius: 4px; box-shadow: none; }
-.workbench .relation-columns .upstream button { color: #bdcba0; background: #2b3426; border-color: #4d5b3d; }
-.workbench .relation-columns .downstream button { color: #dfc58d; background: #3a3224; border-color: #63553a; }
-.workbench .inspector .relation-associated button { color: #d0b8df; background: #332b3d; border-color: #63516f; font-size: 11px; }
-.workbench .inspector .part-relations small { color: var(--ui-muted); font-size: 10px; }
-.workbench .inspector .part-relations h4 { font-size: 11px; }
-.workbench .relation-associated { border-color: var(--ui-line); }
-.workbench .relation-direction-group { grid-template-columns: 62px minmax(0,1fr); }
-.workbench .inspector .part-relations .relation-path-badge { font-size: 9px; color: inherit; }
+/* A single floating workbench combines simulation and camera tools. */
+.workspace-dock { position:absolute; z-index:4; left:calc((100% - var(--scene-right))/2); bottom:24px; transform:translateX(-50%); width:min(580px,calc(100% - var(--scene-right) - 48px)); display:flex; flex-direction:column; gap:8px; padding:8px; border:1px solid #ffffff18; border-radius:14px; background:var(--ui-panel); box-shadow:0 12px 40px #0004; }
+.workbench .control-deck.transmission-control { position:relative; inset:auto; transform:none; width:100%; min-width:0; min-height:64px; padding:8px 12px 12px; display:flex; align-items:center; gap:18px; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:transparent; color:var(--ui-ink); }
+.workbench .transmission-toggle { min-height:40px; gap:9px; padding:0; color:var(--ui-ink); font-size:13px; font-weight:500; white-space:nowrap; }
+.workbench .transmission-toggle input { appearance:none; position:relative; width:18px; height:18px; border:1.5px solid #8297a7; border-radius:5px; background:transparent; }
+.workbench .transmission-toggle input:checked { border-color:#a5bdd0; background:#a5bdd0; }
+.workbench .transmission-toggle input:checked::after { content:""; position:absolute; left:3px; top:4px; width:8px; height:4px; border-left:2px solid #182631; border-bottom:2px solid #182631; transform:rotate(-45deg); }
+.workbench .transmission-toggle:has(input:checked) { color:#d8e6ef; }
+.workbench .assembly-controls { flex:1; min-width:0; display:flex; align-items:center; gap:18px; padding:0; border:0; }
+.workbench .rotor-speed-control { flex:1; min-width:100px; width:auto; gap:1px; }
+.workbench .rotor-speed-control label { color:var(--ui-muted); font-size:11px; gap:8px; }
+.workbench .rotor-speed-control b { color:var(--ui-ink); font:500 16px Bahnschrift,sans-serif; font-variant-numeric:tabular-nums; }
+.workbench .rotor-speed-control small { color:var(--ui-muted); font-size:10px; margin-left:4px; font-weight:400; }
+.workbench #rotor-speed-slider { --speed-position:50%; appearance:none; width:100%; height:24px; margin:0; background:transparent; cursor:ew-resize; }
+.workbench #rotor-speed-slider::-webkit-slider-runnable-track { height:3px; border-radius:4px; background:linear-gradient(to right,#a5bdd0 var(--speed-position),#3c4b57 var(--speed-position)); }
+.workbench #rotor-speed-slider::-webkit-slider-thumb { appearance:none; width:12px; height:12px; margin-top:-4.5px; border:0; border-radius:50%; background:#e0e7ec; box-shadow:0 1px 4px #0006; }
+.workbench #rotor-speed-slider::-moz-range-track { height:3px; background:linear-gradient(to right,#a5bdd0 var(--speed-position),#3c4b57 var(--speed-position)); }
+.workbench #rotor-speed-slider::-moz-range-thumb { width:12px; height:12px; border:0; border-radius:50%; background:#e0e7ec; }
+.workbench #disassembly-open { min-height:40px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 14px; color:#19252d; border:0; border-radius:7px; background:var(--ui-gold); font-size:13px; font-weight:600; white-space:nowrap; }
+.workbench #disassembly-open:hover:not(:disabled) { background:#d9c28e; }
+.workbench #disassembly-open svg { width:17px; height:17px; }
+.workbench #disassembly-error { position:absolute; left:0; bottom:calc(100% + 16px); max-width:300px; padding:12px; color:#ffc3b4; background:#39272a; border-radius:8px; }
+.workbench .viewer-toolbar { position:relative; inset:auto; width:100%; transform:none; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.workbench .navigation-modes { display:contents; }
+.workbench .viewer-toolbar > i { display:none; }
+.workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { min-width:0; height:44px; padding:0 6px; display:flex; align-items:center; justify-content:center; gap:7px; color:#b7c4ce; font-size:12px; font-weight:500; border:0; border-radius:7px; background:transparent; box-shadow:none; white-space:nowrap; }
+.workbench .viewer-toolbar button svg { width:17px; height:17px; }
+.workbench .viewer-toolbar button:hover { color:#f0f5f8; background:#ffffff07; }
+.workbench .viewer-toolbar button.active { color:#e3eef5; background:#2b3e4c; border:0; box-shadow:none; }
+.workbench .viewer-toolbar button.sensor-layer.active { color:#f4ad9e; background:#492c2c; box-shadow:none; }
+.workbench .viewer-toolbar button.accent[aria-pressed="true"] { color:#e4ce9e; background:#39352b; border:0; box-shadow:none; }
+.workbench .viewer-toolbar .point-alarm-console { bottom:calc(100% + var(--dock-settings-height) + 24px); right:0; width:min(400px,100%); padding:10px; gap:8px; background:#17252e; border:1px solid #594442; border-radius:10px; box-shadow:0 10px 30px #0005; }
+.workbench .viewer-toolbar .point-alarm-console button { min-height:44px; height:44px; padding:0 12px; border:0; background:#963c32; color:#fff0e9; font-size:12px; }
 
-/* Camera tools are deliberately separate from simulation controls. */
-.workbench .viewer-toolbar {
-  left: calc((100% - var(--ui-rail))/2); right: auto; bottom: 24px; width: auto;
-  display: flex; gap: 4px; padding: 6px; border: 1px solid #3d505e;
-  border-radius: 9px; background: #16232c; transform: translateX(-50%);
-  box-shadow: var(--ui-floating-shadow);
-}
-.workbench .navigation-modes { display: flex; gap: 2px; padding: 2px; border: 1px solid #30414e; border-radius: 5px; background: var(--ui-recess); }
-.workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { height: 44px; min-width: 68px; padding: 0 12px; gap: 7px; color: #b9c6d0; font-size: 12px; font-weight: 500; border: 1px solid transparent; border-radius: 6px; }
-.workbench .viewer-toolbar .navigation-modes button { height: 38px; border-radius: 3px; }
-.workbench .viewer-toolbar button:hover { color: var(--ui-ink); background: var(--ui-soft); }
-.workbench .viewer-toolbar button.active { color: #e0ebf3; background: #2c4050; border-color: #496173; box-shadow: inset 0 1px #ffffff0a,0 1px 3px #0002; }
-.workbench .viewer-toolbar button.sensor-layer.active { color: var(--ui-danger); background: #3b292b; border-color: #83514b; box-shadow: none; }
-.workbench .viewer-toolbar button.accent[aria-pressed="true"] { color: #e2c88e; background: var(--ui-gold-soft); border-color: #7a6946; box-shadow: none; }
-.workbench .viewer-toolbar > i { width: 1px; height: 22px; margin: 0 4px; background: var(--ui-line); }
-.workbench .viewer-toolbar .point-alarm-console { background: var(--ui-paper); border-color: #83514b; border-radius: 8px; box-shadow: 0 8px 24px #0002; }
-.workbench .viewer-toolbar .point-alarm-console button { background: #943d33; border-color: #c36c5f; color: white; font-size: 12px; }
+/* The inspector is a legible, lightweight floating panel, with contextual content. */
+.workbench .inspector { top:24px; right:24px; bottom:24px; left:auto; width:var(--ui-rail); min-height:0; padding:18px 16px; border:1px solid #ffffff14; border-radius:12px; color:var(--ui-ink); background:var(--ui-panel); box-shadow:0 12px 40px #0002; animation:none; }
+.workbench .inspector::after { display:none; }
+.inspector-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; padding:0 4px; margin-bottom:18px; }
+.workbench .inspector-heading h2 { margin:0; color:#edf2f6; font-family:inherit; font-size:16px; font-weight:600; line-height:1.4; letter-spacing:.02em; }
+.workbench #inspector-close { width:30px; height:30px; display:grid; place-items:center; padding:0; color:#9eafbc; background:transparent; border:0; border-radius:6px; cursor:pointer; }
+.workbench #inspector-close:hover { color:#f0f5f8; background:#ffffff08; }
+.workbench #inspector-close svg { width:18px; height:18px; }
+.workbench .inspector-tabs { flex-shrink:0; display:grid; grid-template-columns:repeat(3,1fr); gap:0; margin:0; padding:0; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:transparent; }
+.workbench .inspector-tabs button { display:flex; align-items:center; justify-content:center; gap:6px; height:40px; min-height:40px; padding:0 4px; border:0; border-radius:0; color:#9baebb; background:transparent; font-size:13px; white-space:nowrap; }
+.workbench .inspector-tabs button svg { display:none; }
+.workbench .inspector-tabs button.active { color:#edf2f6; font-weight:600; background:transparent; box-shadow:inset 0 -2px #c6ac75; }
+.workbench .inspector-tabs button:hover { color:#edf2f6; }
+.workbench .inspector-tabs button b { min-width:15px; height:15px; padding:0 3px; margin:0; border:0; border-radius:4px; background:#ffffff09; color:#9dabb7; font:10px/15px Bahnschrift,sans-serif; }
+.workbench .inspector .search-box { flex-shrink:0; display:grid; grid-template-columns:17px minmax(0,1fr); height:38px; min-height:38px; margin-top:18px; gap:8px; padding:0 10px; background:#ffffff05; border:1px solid #ffffff09; border-radius:7px; }
+.workbench .inspector .search-box input { color:var(--ui-ink); font-size:13px; }
+.workbench .inspector .search-box input::placeholder,.workbench .inspector .search-box svg { color:#93a6b5; }
+.workbench .inspector .search-box:focus-within { border-color:#718b9f; box-shadow:none; }
+.assembly-summary { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; margin:22px 5px 10px; padding:0; color:#d6e0e8; font-size:12px; }
+.assembly-summary b { color:#9aabb7; font-size:10px; font-weight:400; }
+.workbench .inspector .part-results { margin:0; padding:0 0 12px; border:0; min-height:100px; }
+.workbench .inspector .tree-group { padding:0 0 8px; }
+.workbench .inspector .tree-group + .tree-group { margin-top:8px; border:0; }
+.workbench .tree-group-toggle { display:flex; align-items:center; width:100%; min-height:32px; padding:0 6px; gap:8px; color:#95a9b8; background:transparent; border:0; border-radius:5px; font-size:12px; font-weight:500; cursor:pointer; }
+.workbench .tree-group-toggle:hover { background:#ffffff04; color:#d5e0e8; }
+.workbench .tree-group-toggle b { margin-left:auto; padding-right:4px; color:#92a4b2; font:11px Bahnschrift,sans-serif; }
+.workbench .tree-chevron { width:12px; height:12px; transition:transform 140ms; }
+.workbench .tree-group-toggle[aria-expanded="true"] .tree-chevron { transform:rotate(90deg); }
+.workbench .tree-group-items { margin-left:7px; padding-left:3px; border:0; }
+.workbench .inspector .part-row { min-height:40px; padding:8px 9px; display:grid; grid-template-columns:18px minmax(0,1fr) 9px; gap:10px; border:0; border-radius:6px; color:#cbd7df; opacity:1; animation:none; }
+.workbench .inspector .part-row strong { font-size:14px; font-weight:400; letter-spacing:0; line-height:1.5; color:inherit; }
+.workbench .inspector .part-row:hover { color:#edf3f7; background:#ffffff06; }
+.workbench .inspector .part-row.active { color:#edf3f7; background:#2a3e4d; box-shadow:none; }
+.workbench .tree-node::before { display:none; }
+.workbench .tree-node svg { width:17px; height:17px; color:#8ca3b5; }
+.workbench .part-row.active .tree-node svg { color:#c9b582; }
+.workbench .inspector .visibility { color:#c9b582; font-size:9px; }
+.workbench .inspector .selected-card { margin-top:4px; padding:12px 4px; gap:8px; grid-template-columns:minmax(0,1fr) auto; border:0; border-bottom:1px solid var(--ui-line); background:transparent; }
+.workbench .inspector .selected-caption { display:block; margin-bottom:5px; font-size:10px; color:#9bafbd; }
+.workbench .inspector .selected-card strong { color:#e6eef5; font-size:17px; font-weight:500; }
+.workbench #clear-part-focus { grid-column:auto; height:32px; padding:0 4px; margin:0; border:0; color:#a5bdd0; background:transparent; font-size:11px; }
+.workbench .inspector .part-relations { margin:12px 0 16px; padding:12px; border:0; border-radius:8px; background:#ffffff04; max-height:min(40dvh,360px); }
+.workbench .inspector .part-relations h3 { color:#dce6ec; font-size:12px; font-weight:500; }
+.workbench .inspector .relation-legend { gap:10px; margin:10px 0; font-size:10px; }
+.workbench .relation-legend .current { color:#ced8e0; }
+.workbench .relation-legend .upstream,.workbench .relation-columns .upstream h4 { color:#bdcba0; }
+.workbench .relation-legend .downstream,.workbench .relation-columns .downstream h4 { color:#dfc58d; }
+.workbench .relation-legend .related,.workbench .inspector .relation-associated h4 { color:#d0b8df; }
+.workbench .inspector .part-relations button { min-height:32px; font-size:12px; padding:6px; border:0; border-radius:5px; }
+.workbench .relation-columns .upstream button { color:#bdcba0; background:#2b3426; }
+.workbench .relation-columns .downstream button { color:#dfc58d; background:#3a3224; }
+.workbench .inspector .relation-associated button { color:#d0b8df; background:#332b3d; font-size:11px; }
+.workbench .inspector .part-relations small { color:#9cb0bf; font-size:10px; }
+.workbench .inspector .part-relations h4 { font-size:11px; }
+.workbench .relation-associated { border-color:var(--ui-line); }
+.workbench .relation-direction-group { grid-template-columns:62px minmax(0,1fr); }
+.workbench .inspector .part-relations .relation-path-badge { color:inherit; font-size:9px; }
+.workbench .inspector-toggle { display:none; }
+.workbench.inspector-collapsed { --scene-right:0px; }
+.workbench.inspector-collapsed .inspector { display:none; }
+.workbench.inspector-collapsed .inspector-toggle { display:flex; }
+.workbench .inspector-toggle { position:absolute; z-index:5; top:24px; right:24px; min-height:44px; align-items:center; justify-content:center; padding:0 16px; background:var(--ui-panel); border:1px solid #ffffff14; border-radius:9px; color:#d3dfe8; font-size:13px; cursor:pointer; }
 
-/* Annotation and monitoring share the rail's graphite surfaces and type scale. */
-.workbench .inspector :is(h2,h3,.annotation-mode b,.annotation-row strong,.sensor-row strong,.sensor-row-value,.annotation-form-title strong,.sensor-current strong,.sensor-quality b,.sensor-summary b) { color: var(--ui-ink); }
-.workbench .inspector :is(.annotation-head h2,.sensor-head h2,.sensor-detail h3) { font-family: inherit; font-size: 16px; font-weight: 600; }
-.workbench .inspector :is(.annotation-tip,.annotation-empty,.sensor-empty,.empty-note,.annotation-row small,.sensor-row small,.annotation-form-title small,.annotation-form label > span,.annotation-list-head,.sensor-list-head,.sensor-detail > p,.sensor-current span,.sensor-quality span,.sensor-thresholds,.sensor-summary small) { color: var(--ui-muted); }
-.workbench .inspector :is(.annotation-row strong,.sensor-row strong,.sensor-row-value,.annotation-mode b) { font-size: 13px; font-weight: 500; }
-.workbench .inspector :is(.annotation-row small,.sensor-row small,.annotation-form-title small,.sensor-quality span,.sensor-thresholds) { font-size: 11px; }
-.workbench .inspector :is(.annotation-list-head,.sensor-list-head) { font-size: 12px; border-color: var(--ui-line); }
-.workbench .inspector :is(.annotation-head > button,.sensor-detail-head button,#sensor-create-annotation) { border-color: var(--ui-line); background: var(--ui-surface); color: var(--ui-blue); font-size: 12px; border-radius: 5px; }
-.workbench .inspector .annotation-mode { min-height: 44px; margin-top: 16px; border-color: #3c5263; background: var(--ui-blue-soft); border-radius: 6px; }
-.workbench .annotation-mode-dot { border-color: var(--ui-blue); box-shadow: none; }
-.workbench .annotation-mode[aria-pressed="true"] { background: var(--ui-gold-soft); border-color: #7a6946; }
-.workbench .annotation-mode[aria-pressed="true"] .annotation-mode-dot { border-color: #a48238; background: #a48238; box-shadow: none; }
-.workbench .inspector .annotation-row { border-color: var(--ui-line); }
-.workbench .annotation-row:hover,.workbench .annotation-row.active { background: var(--ui-blue-soft); }
-.workbench .annotation-row-index,.workbench .annotation-form-title > span { color: var(--ui-blue); background: var(--ui-blue-soft); border-color: #496173; box-shadow: none; border-radius: 5px; }
-.workbench .annotation-severity { background: #273c4c; border-color: #496173; color: #a5bdd0; }
-.workbench .annotation-severity[data-severity="注意"] { color: #dfc58d; background: #3a3224; }
-.workbench .annotation-severity[data-severity="重要"],.workbench .annotation-severity[data-severity="紧急"] { color: var(--ui-danger); background: #3b292b; }
-.workbench .inspector .annotation-form { margin-top: 16px; padding: 12px; background: var(--ui-surface); border-color: var(--ui-line); border-radius: 6px; }
-.workbench .inspector .annotation-form :is(input,select,textarea) { font-size: 13px; color: var(--ui-ink); background: var(--ui-paper); border-color: var(--ui-line); border-radius: 4px; }
-.workbench .inspector .annotation-form :is(input,textarea)::placeholder { color: var(--ui-muted); }
-.workbench .inspector .annotation-form-actions button { min-height: 36px; color: var(--ui-blue); background: var(--ui-surface); border-color: var(--ui-line); font-size: 12px; }
-.workbench .inspector .annotation-form-actions .primary { color: #1c252b; background: #c6ac75; border-color: #c6ac75; }
-.workbench .inspector .annotation-form-actions .danger { color: var(--ui-danger); }
-.workbench .inspector .simulation-badge { font-size: 10px; color: var(--ui-muted); background: var(--ui-soft); border: 0; border-radius: 4px; padding: 4px 6px; }
-.workbench .alarm-console { border-color: var(--ui-line); }
-.workbench .alarm-console label { color: var(--ui-muted); font-size: 11px; }
-.workbench .alarm-console select { background: var(--ui-surface); border-color: var(--ui-line); color: var(--ui-ink); border-radius: 5px; font-size: 12px; }
-.workbench .alarm-console button,.workbench .sensor-send-alarm { border: 1px solid #83514b; background: #3b292b; color: var(--ui-danger); border-radius: 5px; font-size: 12px; font-weight: 500; }
-.workbench .alarm-console button:hover,.workbench .sensor-send-alarm:hover { color: white; background: #943d33; }
-.workbench .inspector .sensor-summary { gap: 0; padding: 12px 0; border-bottom: 1px solid var(--ui-line); }
-.workbench .inspector .sensor-summary > span { padding: 0 8px 0 16px; min-height: 42px; background: none; border: 0; border-radius: 0; }
-.workbench .inspector .sensor-summary > span + span { border-left: 1px solid var(--ui-line); }
-.workbench .inspector .sensor-summary b { font: 500 24px/1.2 Bahnschrift,sans-serif; }
-.workbench .inspector .sensor-summary small { font-size: 10px; }
-.workbench .inspector .sensor-summary i { top: 8px; left: 6px; }
-.workbench .sensor-list-head b { color: var(--ui-blue); }
-.workbench .inspector .sensor-row { min-height: 66px; padding: 10px 6px; border-color: var(--ui-line); border-radius: 4px; }
-.workbench .inspector .sensor-row-value { font: 500 13px Bahnschrift,"Microsoft YaHei UI",sans-serif; font-variant-numeric: tabular-nums; letter-spacing: .01em; }
-.workbench .sensor-row:hover,.workbench .sensor-row.active { background: var(--ui-blue-soft); }
-.workbench .sensor-row > i { box-shadow: none; border-color: transparent; }
-.workbench .sensor-row.demo-alarm-target { background: #3b292b; border-left-color: var(--ui-danger); }
-.workbench .inspector .sensor-panel.detail-open { inset: 64px 0 0; padding: 16px; background: var(--ui-paper); border-radius: 0; box-shadow: none; overflow-y: auto; }
-.workbench .inspector .sensor-detail { padding: 0; background: transparent; border: 0; }
-.workbench .sensor-detail-head { top: 0; background: var(--ui-paper); }
-.workbench .sensor-detail-head > span { color: var(--ui-blue); }
-.workbench .sensor-current b { font-size: 12px; color: var(--ui-blue); border-color: #496173; }
-.workbench .sensor-current b[data-status="warning"] { color: #dfc58d; border-color: #7a6946; }
-.workbench .sensor-current b[data-status="alarm"] { color: var(--ui-danger); border-color: #83514b; }
-.workbench .sensor-current b[data-status="offline"] { color: var(--ui-muted); }
-.workbench .inspector #sensor-trend { background: #1c2932; border: 0; border-radius: 6px; }
-.workbench .generator-guide { left: 24px; top: 88px; width: 280px; padding: 16px; background: var(--ui-paper); color: var(--ui-ink); border: 1px solid var(--ui-line); border-radius: 8px; }
-.workbench .generator-guide h2 { color: var(--ui-ink); font-size: 14px; }
-.workbench .generator-view-switch { border-color: var(--ui-line); background: var(--ui-soft); }
-.workbench .generator-view-switch button { color: var(--ui-muted); }
-.workbench .generator-view-switch button[aria-pressed="true"] { color: var(--ui-blue); background: var(--ui-surface); box-shadow: 0 1px 3px #0001; }
-.workbench :is(#generator-internal-detail,.generator-detail-actions button) { color: var(--ui-blue); background: var(--ui-surface); border-color: var(--ui-line); border-radius: 5px; }
-.workbench .alarm-banner { top: 88px; left: 24px; right: calc(var(--ui-rail) + 24px); max-width: none; }
+/* Secondary work stays in the same inspector instead of building more cards. */
+.workbench .inspector :is(h2,h3,.annotation-mode b,.annotation-row strong,.sensor-row strong,.sensor-row-value,.annotation-form-title strong,.sensor-current strong,.sensor-quality b,.sensor-summary b) { color:var(--ui-ink); }
+.workbench .inspector :is(.annotation-tip,.annotation-empty,.sensor-empty,.empty-note,.annotation-row small,.sensor-row small,.annotation-form-title small,.annotation-form label>span,.annotation-list-head,.sensor-list-head,.sensor-detail>p,.sensor-current span,.sensor-quality span,.sensor-thresholds,.sensor-summary small) { color:var(--ui-muted); }
+.workbench .inspector :is(.annotation-row strong,.sensor-row strong,.annotation-mode b) { font-size:14px; font-weight:500; }
+.workbench .inspector :is(.annotation-row small,.sensor-row small,.sensor-quality span,.sensor-thresholds) { font-size:11px; }
+.workbench .inspector :is(.annotation-list-head,.sensor-list-head) { font-size:12px; border-color:var(--ui-line); }
+.workbench .inspector .annotation-head { display:none; }
+.workbench .inspector .sensor-head h2 { display:none; }
+.workbench .inspector .sensor-head { justify-content:flex-end; margin-top:16px; }
+.workbench .inspector :is(.sensor-detail-head button,#sensor-create-annotation) { color:#a5bdd0; border:1px solid var(--ui-line); background:#ffffff05; border-radius:6px; font-size:12px; }
+.workbench .inspector .annotation-mode { min-height:44px; margin-top:18px; border:0; background:#283b49; border-radius:7px; }
+.workbench .annotation-mode-dot { box-shadow:none; border-color:#adc5d6; }
+.workbench .annotation-mode[aria-pressed="true"] { background:#39352b; }
+.workbench .annotation-mode[aria-pressed="true"] .annotation-mode-dot { background:#c6ac75; border-color:#c6ac75; box-shadow:none; }
+.workbench .inspector .annotation-row { border-color:var(--ui-line); }
+.workbench .annotation-row:hover,.workbench .annotation-row.active { background:#ffffff05; }
+.workbench .annotation-row-index,.workbench .annotation-form-title>span { color:#b9cede; border-color:#ffffff18; border-radius:6px; }
+.workbench .inspector .annotation-form { background:#ffffff03; border:0; border-radius:8px; padding:12px; }
+.workbench .inspector .annotation-form :is(input,select,textarea) { background:#ffffff05; color:var(--ui-ink); border-color:#ffffff14; border-radius:5px; font-size:14px; }
+.workbench .inspector .annotation-form :is(input,textarea)::placeholder { color:#92a6b5; }
+.workbench .inspector .annotation-form-actions button { min-height:36px; border:0; background:#263642; color:#cadbe6; border-radius:5px; font-size:12px; }
+.workbench .inspector .annotation-form-actions .primary { background:#a5bdd0; color:#16232c; }
+.workbench .inspector .annotation-form-actions .danger { color:#ee9b8b; background:transparent; }
+.workbench .inspector .simulation-badge { padding:0; color:#9fb0be; background:transparent; border:0; font-size:11px; }
+.workbench .alarm-console { border-color:var(--ui-line); }
+.workbench .alarm-console label { color:#a4b2be; font-size:11px; }
+.workbench .alarm-console select { background:#ffffff05; border-color:#ffffff12; color:#dce6ec; border-radius:6px; font-size:12px; }
+.workbench .alarm-console button,.workbench .sensor-send-alarm { min-height:42px; background:#3c292a; color:#efb1a3; border:0; border-radius:6px; font-size:12px; font-weight:500; }
+.workbench .alarm-console button:hover,.workbench .sensor-send-alarm:hover { background:#6f302b; color:#fff0ea; }
+.workbench .inspector .sensor-summary { gap:0; padding:16px 0; border-bottom:1px solid var(--ui-line); }
+.workbench .inspector .sensor-summary>span { min-height:46px; padding:0 8px 0 16px; background:transparent; border:0; border-radius:0; }
+.workbench .inspector .sensor-summary>span+span { border-left:1px solid var(--ui-line); }
+.workbench .inspector .sensor-summary b { font:500 26px/1.2 Bahnschrift,sans-serif; }
+.workbench .inspector .sensor-summary small { font-size:10px; }
+.workbench .inspector .sensor-summary i { left:6px; top:8px; }
+.workbench .sensor-list-head b { color:#adc4d5; }
+.workbench .inspector .sensor-row { min-height:70px; padding:12px 4px; border-color:var(--ui-line); border-radius:4px; }
+.workbench .sensor-row:hover,.workbench .sensor-row.active { background:#ffffff05; }
+.workbench .sensor-row>i { box-shadow:none; border:0; }
+.workbench .inspector .sensor-row-value { font:500 13px Bahnschrift,"Microsoft YaHei UI",sans-serif; font-variant-numeric:tabular-nums; }
+.workbench .sensor-row.demo-alarm-target { background:#3b292b; }
+.workbench .inspector .sensor-panel.detail-open { position:relative; inset:auto; padding:0; border-radius:0; background:transparent; box-shadow:none; }
+.workbench .inspector .sensor-detail { padding:12px 0; background:transparent; border:0; }
+.workbench .sensor-detail-head { top:0; background:#14212a; }
+.workbench .sensor-detail-head>span { color:#adc4d5; }
+.workbench .sensor-current b { color:#b3c9d8; border-color:#3a4d5a; font-size:12px; }
+.workbench .sensor-current b[data-status="warning"] { color:#e2c78d; }
+.workbench .sensor-current b[data-status="alarm"] { color:#ee9b8b; }
+.workbench .inspector #sensor-trend { border:0; border-radius:7px; background:#101c24; }
+.workbench .generator-guide { top:112px; left:24px; width:280px; padding:16px; color:var(--ui-ink); background:var(--ui-panel); border:1px solid var(--ui-line); border-radius:10px; }
+.workbench .generator-guide h2 { color:#e2e8ed; font-size:15px; }
+.workbench .generator-view-switch { border:0; background:#ffffff04; border-radius:6px; }
+.workbench .generator-view-switch button { color:#a4b2be; }
+.workbench .generator-view-switch button[aria-pressed="true"] { color:#e0ebf3; background:#2a3e4d; box-shadow:none; }
+.workbench :is(#generator-internal-detail,.generator-detail-actions button) { color:#cadce8; background:#ffffff05; border:1px solid var(--ui-line); border-radius:6px; }
+.workbench .alarm-banner { top:112px; left:24px; right:calc(var(--scene-right) + 24px); max-width:none; }
 
-/* Disassembly continues the same instrument language, with a gold progress rail. */
-.workbench .disassembly-header { inset: 0 0 auto; min-height: 72px; padding: 14px 24px; border: 0; border-bottom: 1px solid var(--ui-line); border-radius: 0; background: var(--ui-paper); box-shadow: inset 0 1px var(--ui-highlight); color: var(--ui-ink); }
-.workbench .disassembly-heading { gap: 12px; }
-.workbench .disassembly-heading h1 { font-size: 17px; font-weight: 600; letter-spacing: 0; }
-.workbench #disassembly-count { color: var(--ui-muted); font-size: 11px; }
-.workbench #disassembly-page button { min-height: 40px; background: var(--ui-surface); color: #c9d4dd; border-color: #3b4f5e; border-radius: 5px; font-size: 12px; box-shadow: inset 0 1px var(--ui-highlight); }
-.workbench #disassembly-page button:hover { background: var(--ui-blue-soft); }
-.workbench #disassembly-page button[aria-pressed="true"] { color: #e2c88e; background: #3d382d; border-color: #7a6946; }
-.workbench #disassembly-close { padding-left: 30px; position: relative; color: var(--ui-ink); }
-.workbench #disassembly-close::before { content: ""; position: absolute; left: 14px; top: 16px; width: 6px; height: 6px; border-left: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
-.workbench .disassembly-filters :is(select,input) { color: var(--ui-ink); background: var(--ui-recess); border-color: var(--ui-line); border-radius: 5px; font-size: 12px; }
-.workbench .disassembly-filters select { width: 150px; }
-.workbench .disassembly-timeline { bottom: 24px; width: min(600px,calc(100% - 48px)); padding: 12px 16px; background: var(--ui-paper); border: 1px solid #3d505e; border-radius: 9px; box-shadow: var(--ui-floating-shadow); color: var(--ui-ink); }
-.workbench .disassembly-actions [role="group"] { gap: 2px; padding: 3px; border: 1px solid var(--ui-line); border-radius: 5px; background: var(--ui-recess); }
-.workbench .disassembly-actions [role="group"] button { min-height: 34px; border-color: transparent; background: transparent; box-shadow: none; }
-.workbench #disassembly-stage { font-size: 11px; }
-.workbench .disassembly-progress output { min-width: 36px; text-align: right; font: 12px Bahnschrift,sans-serif; font-variant-numeric: tabular-nums; color: var(--ui-ink); }
-.workbench #disassembly-play { color: var(--ui-ink)!important; background: var(--ui-surface); border-color: var(--ui-line)!important; }
-.workbench :is(#disassembly-stage,.disassembly-progress,.disassembly-caption label,.disassembly-timeline p) { color: var(--ui-muted); font-size: 11px; }
-.workbench .disassembly-progress input { accent-color: #c6ac75; min-height: 24px; }
-.workbench .disassembly-caption input { accent-color: var(--ui-blue); width: 16px; height: 16px; }
-.workbench #disassembly-list { top: 88px; bottom: 184px; right: 24px; width: 280px; border: 1px solid var(--ui-line); background: var(--ui-paper); color: var(--ui-ink); box-shadow: 0 8px 24px #0002; }
-.workbench #disassembly-list-items button { border-radius: 0; border-color: var(--ui-line); background: transparent; color: var(--ui-ink); }
-.workbench #disassembly-list-items span { color: var(--ui-blue); }
-.workbench #disassembly-list-items small { color: var(--ui-muted); }
-.workbench #disassembly-labels button { min-height: 28px; padding: 4px 9px; background: #263944f5; color: #d4e0e9; border: 1px solid #536b7c; border-radius: 4px; font-size: 11px; }
-.workbench #disassembly-selection { bottom: 184px; color: var(--ui-ink); background: var(--ui-paper); border: 1px solid var(--ui-line); border-left: 3px solid var(--ui-gold); border-radius: 7px; padding: 10px 12px; box-shadow: 0 6px 24px #0002; }
-.workbench #disassembly-selection small { color: var(--ui-muted); font-size: 11px; }
-.workbench :is(#disassembly-busy,#disassembly-empty) { color: var(--ui-ink); background: var(--ui-paper); border-color: var(--ui-line); }
+/* Disassembly uses the same two floating surfaces and typography. */
+.workbench .disassembly-header { top:20px; left:24px; right:24px; min-height:64px; padding:12px 16px; background:var(--ui-panel); border:1px solid #ffffff14; border-radius:12px; color:var(--ui-ink); box-shadow:0 8px 30px #0002; }
+.workbench .disassembly-heading { gap:12px; }
+.workbench .disassembly-heading h1 { font:600 17px/1.4 "Microsoft YaHei UI",sans-serif; letter-spacing:0; }
+.workbench #disassembly-count { color:#9bafbd; font-size:11px; }
+.workbench #disassembly-page button { min-height:40px; padding:0 12px; color:#d2dfe8; background:#ffffff06; border:0; border-radius:6px; font-size:12px; box-shadow:none; }
+.workbench #disassembly-page button:hover { background:#ffffff0e; }
+.workbench #disassembly-page button[aria-pressed="true"] { color:#e3cc99; background:#39352b; border:0; }
+.workbench #disassembly-close { background:transparent; color:#a5bdd0; padding-left:12px; }
+.workbench #disassembly-close::before { display:none; }
+.workbench .disassembly-filters :is(select,input) { height:40px; color:#d4e0e8; background:#ffffff04; border:1px solid #ffffff0e; border-radius:6px; font-size:12px; }
+.workbench .disassembly-filters select { width:150px; }
+.workbench .disassembly-timeline { width:min(580px,calc(100% - 48px)); bottom:24px; padding:14px 16px; background:var(--ui-panel); border:1px solid #ffffff18; border-radius:12px; color:var(--ui-ink); box-shadow:0 10px 32px #0004; }
+.workbench .disassembly-actions [role="group"] { gap:4px; padding:0; border:0; background:transparent; }
+.workbench #disassembly-play { color:#c7d9e6!important; border-color:transparent!important; background:#293d4a; }
+.workbench :is(#disassembly-stage,.disassembly-progress,.disassembly-caption label,.disassembly-timeline p) { color:#9bafbd; font-size:11px; }
+.workbench .disassembly-progress input { min-height:24px; accent-color:#c6ac75; }
+.workbench .disassembly-progress output { font:12px Bahnschrift,sans-serif; color:#e2e8ed; text-align:right; }
+.workbench #disassembly-list { top:104px; right:24px; bottom:184px; width:280px; color:#d5e1e9; border:1px solid #ffffff14; background:var(--ui-panel); border-radius:10px; }
+.workbench #disassembly-list-items button { border-radius:0; border-bottom:1px solid var(--ui-line); background:transparent; }
+.workbench #disassembly-list-items span { color:#b8ccdb; }
+.workbench #disassembly-list-items small { color:#a4b2be; }
+.workbench #disassembly-labels button { min-height:28px; padding:4px 9px; color:#d4e2eb; background:#1d303de8; border:1px solid #536c7b66; border-radius:6px; font-size:11px; }
+.workbench #disassembly-selection { bottom:184px; padding:10px 14px; background:var(--ui-panel); color:#dfe8ef; border:1px solid #ffffff18; border-radius:9px; box-shadow:0 8px 24px #0003; }
+.workbench #disassembly-selection small { color:#a4b2be; font-size:11px; }
+.workbench :is(#disassembly-busy,#disassembly-empty) { background:var(--ui-panel); color:#e2e8ed; border-color:var(--ui-line); border-radius:10px; }
 
 @media (min-width:901px) and (max-width:1180px) {
-  :root { --ui-rail: 292px; }
-  .workbench-context { display: none; }
-  .workbench .control-deck.transmission-control { left: 190px; gap: 16px; }
-  .workbench .assembly-controls { gap: 16px; padding-left: 16px; }
-  .workbench .rotor-speed-control { width: 160px; }
-  .workbench .inspector { padding: 16px; }
-  .workbench .viewer-toolbar button { padding: 0 9px; }
-  .workbench .disassembly-header { padding: 12px 16px; gap: 10px; }
-  .workbench .disassembly-heading { gap: 8px; }
-  .workbench .disassembly-filters input { width: 150px; }
+  :root { --ui-rail:286px; }
+  .workbench .inspector { padding:16px 14px; }
+  .workbench .inspector .part-row strong { font-size:13px; }
+  .workbench .control-deck.transmission-control,.workbench .assembly-controls { gap:12px; }
+  .workbench .rotor-speed-control { min-width:90px; }
+  .workbench #disassembly-open { padding:0 10px; }
+  .workbench .disassembly-header { gap:10px; }
+  .workbench .disassembly-heading { gap:8px; }
+  .workbench .disassembly-filters input { width:150px; }
 }
-
-/* A closed mobile sheet leaves the whole model available. All primary touch
-   controls are at least 44px; the information sheet stays below a third of height. */
-@media (max-width:900px), (pointer:coarse) and (max-width:1400px) {
-  :root { --ui-header: calc(56px + env(safe-area-inset-top)); }
-  .workbench-header { padding: env(safe-area-inset-top) 16px 0; gap: 10px; }
-  .workbench-identity { gap: 8px; }
-  .workbench-identity h1 { font-size: 16px; }
-  .workbench-identity svg { width: 26px; height: 26px; }
-  .workbench-context,.workbench-note { display: none; }
-  .workbench .inspector-toggle { z-index: 5; top: calc(6px + env(safe-area-inset-top)); right: max(12px,env(safe-area-inset-right)); min-height: 44px; padding: 0 12px; font-size: 12px; color: var(--ui-blue); border-color: var(--ui-line); background: var(--ui-surface); border-radius: 6px; }
-  .workbench .inspector-toggle[aria-expanded="true"] { color: #e2c88e; background: var(--ui-gold-soft); border-color: #7a6946; }
-  .workbench .control-deck.transmission-control { top: calc(var(--ui-header) + 12px); left: max(12px,env(safe-area-inset-left)); right: max(12px,env(safe-area-inset-right)); width: auto; padding: 6px 12px; display: grid; grid-template-columns: minmax(0,1fr) 112px; gap: 0 12px; border: 1px solid #33434f; background: var(--ui-paper); border-radius: 8px; }
-  .workbench .transmission-toggle { grid-column: 1; grid-row: 1; min-height: 44px; font-size: 12px; padding: 0; gap: 8px; }
-  .workbench .assembly-controls { display: contents; }
-  .workbench #disassembly-open { grid-column: 2; grid-row: 1; min-height: 44px; padding: 0 10px; font-size: 12px; }
-  .workbench .rotor-speed-control { grid-column: 1/-1; grid-row: 2; display: flex; align-items: center; gap: 16px; width: auto; min-height: 44px; }
-  .workbench .rotor-speed-control label { flex-shrink: 0; gap: 10px; font-size: 11px; }
-  .workbench .rotor-speed-control b { font-size: 14px; }
-  .workbench #rotor-speed-slider { height: 44px; flex: 1; }
-  .workbench .viewer-toolbar { left: max(12px,env(safe-area-inset-left)); right: max(12px,env(safe-area-inset-right)); bottom: max(12px,env(safe-area-inset-bottom)); width: auto; transform: none; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2px; padding: 4px; border-radius: 9px; }
-  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { height: 52px; min-width: 0; flex-direction: column; gap: 4px; padding: 4px 0; font-size: 10px; white-space: nowrap; }
-  .workbench .viewer-toolbar button svg { width: 19px; height: 19px; }
-  .workbench .viewer-toolbar > i { display: none; }
-  .workbench .viewer-toolbar .point-alarm-console { bottom: calc(100% + 12px); width: 100%; grid-template-columns: minmax(0,1fr) auto; }
-  .workbench .viewer-toolbar .point-alarm-console button { min-height: 44px; height: 44px; padding: 0 10px; font-size: 12px; }
-  .workbench .inspector { top: auto; left: max(12px,env(safe-area-inset-left)); right: max(12px,env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); height: min(32dvh,280px); width: auto; padding: 8px 12px 12px; border: 1px solid var(--ui-line); border-radius: 10px; background: var(--ui-paper); box-shadow: 0 8px 28px #0003; }
-  .workbench .inspector-tabs button { font-size: 12px; }
-  .workbench .inspector-tabs button { min-height: 44px; }
-  .workbench .assembly-summary { display: none; }
-  .workbench .tree-group-toggle { min-height: 44px; }
-  .workbench .navigation-modes { display: contents; }
-  .workbench .viewer-toolbar .navigation-modes button { height: 52px; border-radius: 5px; }
-  .workbench .inspector .search-box { margin-top: 12px; height: 44px; }
-  .workbench .inspector .search-box input,.workbench .inspector .annotation-form :is(input,select,textarea),.workbench .alarm-console select { font-size: 16px; }
-  .workbench .inspector .search-box input::placeholder { font-size: 13px; }
-  .workbench .inspector .part-results { min-height: 0; overflow: visible; margin-top: 0; }
-  .workbench .inspector .part-row { min-height: 44px; }
-  .workbench .inspector .tree-group { padding-top: 4px; }
-  .workbench .inspector .selected-card { margin-top: 12px; }
-  .workbench .inspector .part-relations { display: block; max-height: none; overflow: visible; }
-  .workbench .inspector .part-relations button,.workbench #clear-part-focus { min-height: 44px; }
-  .workbench .inspector .sensor-panel.detail-open { inset: 62px 0 0; padding: 12px; background: var(--ui-paper); }
-  .workbench .inspector :is(.annotation-head > button,.annotation-form-actions button,.sensor-detail-head button,#sensor-create-annotation) { min-height: 44px; }
-  .workbench .alarm-banner { top: calc(var(--ui-header) + 124px); left: 12px; right: 12px; }
-  .workbench.demo-alarm-active .control-deck.transmission-control { display: none; }
-  .workbench.demo-alarm-active .alarm-banner { top: calc(var(--ui-header) + 12px); }
-  .workbench .generator-guide { display: none; }
-  .workbench .disassembly-header { padding: calc(8px + env(safe-area-inset-top)) 12px 8px; gap: 8px; }
-  .workbench .disassembly-heading { width: 100%; gap: 6px; }
-  .workbench .disassembly-heading h1 { font-size: 14px; }
-  .workbench #disassembly-page button { min-height: 44px; font-size: 11px; padding: 0 9px; }
-  .workbench #disassembly-close { padding-left: 22px; }
-  .workbench #disassembly-close::before { left: 10px; top: 18px; }
-  .workbench .disassembly-filters { width: 100%; gap: 8px; }
-  .workbench .disassembly-filters :is(select,input) { height: 44px; width: 0; flex: 1; font-size: 16px; }
-  .workbench .disassembly-filters input::placeholder { font-size: 12px; }
-  .workbench .disassembly-timeline { bottom: max(12px,env(safe-area-inset-bottom)); width: calc(100% - 24px); padding: 8px 12px; }
-  .workbench .disassembly-progress { margin-top: 4px; }
-  .workbench .disassembly-progress input { min-height: 36px; }
-  .workbench .disassembly-caption { margin-top: 0; gap: 6px; }
-  .workbench .disassembly-caption label { min-height: 32px; font-size: 11px; }
-  .workbench .disassembly-caption p { font-size: 10px; }
-  .workbench #disassembly-selection { bottom: 186px; max-width: calc(100% - 24px); padding: 8px; }
-  .workbench #disassembly-list { top: auto; bottom: 186px; left: 12px; right: 12px; width: auto; height: min(30dvh,260px); }
-  .workbench #disassembly-labels button { min-height: 32px; padding: 4px 8px; font-size: 11px; }
+@media (max-width:900px),(pointer:coarse) and (max-width:1400px) {
+  :root { --scene-right:0px; --dock-settings-height:92px; }
+  .workbench-header { top:calc(10px + env(safe-area-inset-top)); left:max(12px,env(safe-area-inset-left)); padding:8px 10px; grid-template-columns:24px auto; gap:0 8px; }
+  .workbench-identity svg { width:24px; height:24px; }
+  .workbench-identity h1 { font-size:18px; }
+  .workbench-context { display:none; }
+  .workbench .inspector-toggle { display:flex; top:calc(10px + env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right)); min-height:44px; padding:0 12px; font-size:12px; }
+  .workspace-dock { bottom:max(12px,env(safe-area-inset-bottom)); left:50%; width:calc(100% - 24px); max-width:580px; gap:6px; padding:6px; border-radius:12px; }
+  .workbench .control-deck.transmission-control { min-height:92px; padding:0 6px 6px; display:grid; grid-template-columns:minmax(0,1fr) 112px; gap:0 12px; }
+  .workbench .transmission-toggle { grid-column:1; grid-row:1; min-height:44px; font-size:12px; }
+  .workbench .assembly-controls { display:contents; }
+  .workbench #disassembly-open { grid-column:2; grid-row:1; min-height:44px; padding:0 10px; font-size:12px; }
+  .workbench .rotor-speed-control { grid-column:1/-1; grid-row:2; min-height:42px; display:flex; align-items:center; gap:16px; width:auto; }
+  .workbench .rotor-speed-control label { flex-shrink:0; gap:10px; font-size:11px; }
+  .workbench .rotor-speed-control b { font-size:14px; }
+  .workbench #rotor-speed-slider { height:42px; flex:1; min-width:0; }
+  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { height:52px; flex-direction:column; gap:5px; padding:4px 0; font-size:11px; }
+  .workbench .viewer-toolbar button svg { width:19px; height:19px; }
+  .workbench .viewer-toolbar .point-alarm-console { right:0; width:100%; padding:8px; }
+  .workbench .viewer-toolbar .point-alarm-console button { height:44px; padding:0 8px; font-size:12px; }
+  .workbench .inspector { top:auto; left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); bottom:calc(186px + env(safe-area-inset-bottom)); width:auto; height:min(32dvh,280px); padding:8px 12px 12px; border-radius:12px; }
+  .workbench .inspector-heading { display:none; }
+  .workbench .inspector-heading h2 { font-size:14px; }
+  .workbench #inspector-close { min-width:44px; min-height:44px; }
+  .workbench .inspector-tabs button { min-height:44px; font-size:12px; }
+  .workbench .inspector .search-box { min-height:44px; height:44px; margin-top:10px; }
+  .workbench .inspector .search-box input,.workbench .inspector .annotation-form :is(input,select,textarea),.workbench .alarm-console select { font-size:16px; }
+  .workbench .inspector .search-box input::placeholder { font-size:13px; }
+  .workbench .assembly-summary { display:none; }
+  .workbench .inspector .part-results { min-height:0; overflow:visible; }
+  .workbench .tree-group-toggle { min-height:44px; }
+  .workbench .inspector .part-row { min-height:44px; }
+  .workbench .inspector .selected-card { margin-top:10px; }
+  .workbench .inspector .part-relations { display:block; max-height:none; overflow:visible; }
+  .workbench .inspector .part-relations button,.workbench #clear-part-focus { min-height:44px; }
+  .workbench .inspector :is(.annotation-form-actions button,.sensor-detail-head button,#sensor-create-annotation) { min-height:44px; }
+  .workbench .generator-guide { display:none; }
+  .workbench .alarm-banner { top:76px; left:12px; right:12px; }
+  .workbench.demo-alarm-active { --dock-settings-height:0px; }
+  .workbench.demo-alarm-active .control-deck.transmission-control { display:none; }
+  .workbench .disassembly-header { top:calc(8px + env(safe-area-inset-top)); left:12px; right:12px; padding:8px; gap:8px; }
+  .workbench .disassembly-heading { width:100%; gap:6px; }
+  .workbench .disassembly-heading h1 { font-size:14px; }
+  .workbench #disassembly-page button { min-height:44px; padding:0 9px; font-size:11px; }
+  .workbench .disassembly-filters { width:100%; gap:6px; }
+  .workbench .disassembly-filters :is(select,input) { height:44px; width:0; flex:1; font-size:16px; }
+  .workbench .disassembly-filters input::placeholder { font-size:12px; }
+  .workbench .disassembly-timeline { bottom:max(12px,env(safe-area-inset-bottom)); width:calc(100% - 24px); padding:8px 12px; }
+  .workbench .disassembly-progress { margin-top:4px; }
+  .workbench .disassembly-progress input { min-height:36px; }
+  .workbench .disassembly-caption p { font-size:10px; }
+  .workbench #disassembly-selection { bottom:176px; max-width:calc(100% - 24px); padding:8px; }
+  .workbench #disassembly-list { top:auto; bottom:176px; left:12px; right:12px; width:auto; height:min(30dvh,260px); }
+  .workbench #disassembly-labels button { min-height:32px; padding:4px 8px; font-size:11px; }
 }
-@media (min-width:600px) and (max-width:900px), (min-width:600px) and (max-width:1400px) and (pointer:coarse) {
-  .workbench .control-deck.transmission-control { display: flex; align-items: center; width: fit-content; max-width: calc(100% - 24px); right: auto; gap: 16px; padding: 4px 12px; }
-  .workbench .assembly-controls { display: flex; gap: 16px; padding-left: 16px; border-left: 1px solid var(--ui-line); }
-  .workbench .rotor-speed-control { display: grid; width: 170px; gap: 0; }
-  .workbench #rotor-speed-slider { height: 24px; }
-  .workbench .viewer-toolbar { left: 50%; right: auto; width: 500px; transform: translateX(-50%); }
-  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { height: 44px; flex-direction: row; gap: 6px; font-size: 11px; }
-  .workbench .viewer-toolbar .navigation-modes button { height: 44px; }
-  .workbench .inspector { top: 132px; left: auto; width: 292px; bottom: 80px; height: auto; }
-  .workbench .alarm-banner { top: 132px; }
+@media (min-width:600px) and (max-width:900px),(min-width:600px) and (max-width:1400px) and (pointer:coarse) {
+  .workbench .inspector { top:76px; left:auto; width:286px; height:auto; bottom:186px; }
+  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { flex-direction:row; height:44px; font-size:12px; }
 }
 @media (min-width:600px) and (max-width:1400px) and (max-height:600px) {
-  :root { --ui-header: calc(64px + env(safe-area-inset-top)); }
-  .workbench-header { height: var(--ui-header); }
-  .workbench-identity h1 { font-size: 14px; }
-  .workbench .control-deck.transmission-control { top: calc(6px + env(safe-area-inset-top)); left: 148px; gap: 12px; padding: 4px 8px; }
-  .workbench .assembly-controls { gap: 12px; padding-left: 12px; }
-  .workbench .rotor-speed-control { width: 150px; }
-  .workbench .inspector { top: calc(var(--ui-header) + 12px); width: 264px; bottom: 72px; }
-  .workbench .viewer-toolbar { bottom: 8px; }
-  .workbench .disassembly-header { gap: 8px; padding: 6px 12px; }
-  .workbench .disassembly-heading { width: auto; }
-  .workbench .disassembly-heading h1 { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .workbench .disassembly-filters { min-width: 0; }
-  .workbench .disassembly-filters select { max-width: 120px; }
-  .workbench .disassembly-filters input { min-width: 60px; }
-  .workbench .disassembly-timeline { bottom: 8px; width: min(560px,calc(100% - 24px)); padding: 6px 12px; }
-  .workbench .disassembly-actions button { min-height: 44px!important; }
-  .workbench .disassembly-caption { display: none; }
-  .workbench .disassembly-progress input { min-height: 24px; }
-  .workbench #disassembly-selection { bottom: 118px; }
-  .workbench #disassembly-list { top: 72px; bottom: 118px; left: auto; right: 12px; width: 250px; height: auto; }
+  :root { --dock-settings-height:0px; }
+  .workspace-dock { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(240px,.9fr); align-items:center; gap:12px; max-width:860px; bottom:8px; }
+  .workbench .control-deck.transmission-control { display:flex; min-height:52px; padding:0 4px; border:0; gap:12px; }
+  .workbench .assembly-controls { display:flex; gap:12px; }
+  .workbench .rotor-speed-control { display:grid; width:110px; min-width:80px; min-height:40px; gap:0; }
+  .workbench .rotor-speed-control label { font-size:10px; gap:4px; }
+  .workbench #rotor-speed-slider { height:24px; }
+  .workbench .transmission-toggle { font-size:11px; gap:6px; }
+  .workbench .transmission-toggle input { width:16px; height:16px; }
+  .workbench #disassembly-open { font-size:11px; padding:0 8px; gap:6px; }
+  .workbench #disassembly-open svg { display:none; }
+  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { flex-direction:column; height:48px; gap:4px; font-size:11px; }
+  .workbench .inspector { top:64px; width:264px; bottom:88px; }
+  .workbench.demo-alarm-active .workspace-dock { display:flex; width:min(500px,calc(100% - 24px)); }
+  .workbench .disassembly-header { flex-wrap:nowrap; padding:6px 10px; gap:8px; }
+  .workbench .disassembly-heading { width:auto; }
+  .workbench .disassembly-heading h1 { max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .workbench .disassembly-filters { min-width:0; }
+  .workbench .disassembly-filters select { max-width:120px; }
+  .workbench .disassembly-filters input { min-width:60px; }
+  .workbench .disassembly-timeline { bottom:8px; width:min(560px,calc(100% - 24px)); padding:6px 10px; }
+  .workbench .disassembly-actions button { min-height:44px!important; }
+  .workbench .disassembly-caption { display:none; }
+  .workbench .disassembly-progress input { min-height:24px; }
+  .workbench #disassembly-selection { bottom:118px; }
+  .workbench #disassembly-list { top:76px; bottom:118px; left:auto; right:12px; width:250px; height:auto; }
 }
-@media (min-width:600px) and (max-width:759px) and (max-height:600px) {
-  .workbench-identity h1 { display: none; }
-  .workbench .control-deck.transmission-control { left: 56px; }
-  .workbench .rotor-speed-control { width: 130px; }
-}
-@media (prefers-reduced-motion:reduce) {
-  .workbench *, .workbench *::before, .workbench *::after { transition: none!important; }
-}
+@media (prefers-reduced-motion:reduce) { .workbench *, .workbench *::before, .workbench *::after { transition:none!important; } }
