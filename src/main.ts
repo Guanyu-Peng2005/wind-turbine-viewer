@@ -2146,8 +2146,9 @@ function updateAnnotationOverlay(): void {
     const marker = annotationMarkerElements.get(annotation.id);
     const mesh=annotationMesh(annotation),worldPoint = annotationWorldPoint(annotation);
     if (!marker) return;
-    // A linked alarm owns the pin while active; keep the annotation in the shared list.
-    if(sensorLayerVisible&&annotation.sensorId&&demoAlarm.active?.target.id===annotation.sensorId){marker.hidden=true;return;}
+    // A calibrated location has one pin: annotations while editing, telemetry while monitoring.
+    const linked=sensors.find(sensor=>sensor.id===annotation.sensorId&&sensor.calibrationId===annotation.id);
+    if(sensorLayerVisible&&linked&&(linked.status==='alarm'||(annotationPanel.hidden&&(partsPageOpen||linked.id===selectedSensorId)))){marker.hidden=true;return;}
     if(!mesh||!worldPoint||(!partsPageOpen&&!worldVisible(mesh))){marker.hidden=true;return;}
     const projected = partsPageOpen?disassemblyView?.projectSource(mesh,annotation.binding?.instanceId,annotation.localPosition):worldPoint.project(camera);
     const visible = !!projected&&projected.z > -1 && projected.z < 1&&Math.abs(projected.x)<1&&Math.abs(projected.y)<1;
@@ -2738,6 +2739,7 @@ function updateSensorOverlay(): void {
   sensors.forEach((sensor) => {
     const marker = sensorMarkerElements.get(sensor.id);
     if (!marker) return;
+    if(sensor.calibrationId&&!annotationPanel.hidden&&sensor.status!=='alarm'){marker.hidden=true;return;}
     if (!sensorLayerVisible || (!partsPageOpen&&!worldVisible(sensor.mesh)) || (!partsPageOpen&&sensor.status !== 'alarm' && sensor.id !== selectedSensorId)) {
       if(!marker.hidden)marker.hidden=true;
       return;
