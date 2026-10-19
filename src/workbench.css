@@ -1,4 +1,4 @@
-/* Model-first workspace: Spline's restrained inspector and Speckle's grouped toolbelt.
+/* Spline-inspired editor: quiet chrome, a compact inspector and a narrow tool dock.
    Sources: https://docs.spline.design/basics/understanding-splines-ui
    https://speckle.systems/updates/redesigned-3d-web-viewer/
    UI surfaces stay opaque enough for legibility without per-frame backdrop blur. */
@@ -6,9 +6,9 @@
   --ui-paper:#16232c; --ui-surface:#1e2d38; --ui-soft:#263642;
   --ui-line:#ffffff12; --ui-ink:#e2e8ed; --ui-muted:#a4b2be;
   --ui-blue:#a5bdd0; --ui-blue-soft:#273c4c; --ui-gold:#c6ac75;
-  --ui-gold-soft:#39352b; --ui-danger:#ee9b8b; --ui-rail:312px;
-  --ui-panel:#14212af7; --scene-right:calc(var(--ui-rail) + 48px);
-  --dock-settings-height:64px; --ink:var(--ui-ink); --muted:var(--ui-muted);
+  --ui-gold-soft:#39352b; --ui-danger:#ee9b8b; --ui-rail:280px;
+  --ui-panel:#16232c; --scene-right:var(--ui-rail);
+  --dock-settings-height:0px; --ink:var(--ui-ink); --muted:var(--ui-muted);
   --line:var(--ui-line); --cyan:var(--ui-blue); --cyan-dark:var(--ui-blue);
   font-family:"PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
   color-scheme:dark;
@@ -25,90 +25,90 @@
 .workbench :is(.parts-inspector-panel,.part-results,.sensor-list,.sensor-detail,.annotation-panel,.part-relations) { scrollbar-width:thin; scrollbar-color:#4b5c68 transparent; }
 .workbench svg { flex-shrink:0; }
 
-/* Identity is local to the canvas; there is no full-width application slab. */
-.workbench-header { position:absolute; z-index:4; top:24px; left:24px; display:grid; grid-template-columns:34px auto; align-items:center; column-gap:12px; row-gap:4px; padding:10px 14px; border:0; border-radius:10px; background:#07131be8; pointer-events:none; }
-.workbench-identity { display:contents; }
-.workbench-identity svg { grid-column:1; grid-row:1/3; width:32px; height:32px; color:var(--ui-blue); }
-.workbench-identity h1 { grid-column:2; grid-row:1; margin:0; font-size:22px; font-weight:600; letter-spacing:.04em; line-height:1.35; }
-.workbench-context { grid-column:2; grid-row:2; color:var(--ui-muted); font-size:11px; letter-spacing:.12em; }
+/* Slim editor chrome: restrained type, neutral active tabs, no oversized branding. */
+.workbench-header { position:absolute; z-index:4; inset:0 0 auto; height:48px; display:flex; align-items:center; gap:0; padding:0 16px; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:var(--ui-paper); }
+.workbench-identity { display:flex; align-items:center; gap:9px; }
+.workbench-identity svg { width:20px; height:20px; color:var(--ui-blue); }
+.workbench-identity h1 { margin:0; font-size:14px; font-weight:600; letter-spacing:.02em; line-height:1.4; }
+.workbench-context { margin-left:16px; padding-left:16px; border-left:1px solid var(--ui-line); color:#9dafbc; font-size:11px; letter-spacing:0; }
 .workbench-note { display:none; }
 
-/* A single floating workbench combines simulation and camera tools. */
-.workspace-dock { position:absolute; z-index:4; left:calc((100% - var(--scene-right))/2); bottom:24px; transform:translateX(-50%); width:min(580px,calc(100% - var(--scene-right) - 48px)); display:flex; flex-direction:column; gap:8px; padding:8px; border:1px solid #ffffff18; border-radius:14px; background:var(--ui-panel); box-shadow:0 12px 40px #0004; }
-.workbench .control-deck.transmission-control { position:relative; inset:auto; transform:none; width:100%; min-width:0; min-height:64px; padding:8px 12px 12px; display:flex; align-items:center; gap:18px; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:transparent; color:var(--ui-ink); }
-.workbench .transmission-toggle { min-height:40px; gap:9px; padding:0; color:var(--ui-ink); font-size:13px; font-weight:500; white-space:nowrap; }
-.workbench .transmission-toggle input { appearance:none; position:relative; width:18px; height:18px; border:1.5px solid #8297a7; border-radius:5px; background:transparent; }
+/* Single-row tool dock on desktop; explicit labels remain on touch layouts. */
+.workspace-dock { position:absolute; z-index:4; left:calc((100% - var(--scene-right))/2); bottom:16px; transform:translateX(-50%); width:min(680px,calc(100% - var(--scene-right) - 32px)); display:flex; flex-direction:row; align-items:center; gap:12px; padding:6px; border:1px solid #ffffff12; border-radius:7px; background:var(--ui-panel); box-shadow:0 4px 16px #0003; }
+.workbench .control-deck.transmission-control { position:relative; inset:auto; transform:none; flex:1; width:auto; min-width:0; min-height:42px; padding:0 12px 0 8px; display:flex; align-items:center; gap:14px; border:0; border-right:1px solid var(--ui-line); border-radius:0; background:transparent; color:var(--ui-ink); }
+.workbench .transmission-toggle { min-height:36px; gap:8px; padding:0; color:#c5d3dc; font-size:12px; font-weight:400; white-space:nowrap; }
+.workbench .transmission-toggle input { appearance:none; position:relative; width:16px; height:16px; border:1px solid #8297a7; border-radius:3px; background:transparent; }
 .workbench .transmission-toggle input:checked { border-color:#a5bdd0; background:#a5bdd0; }
 .workbench .transmission-toggle input:checked::after { content:""; position:absolute; left:3px; top:4px; width:8px; height:4px; border-left:2px solid #182631; border-bottom:2px solid #182631; transform:rotate(-45deg); }
 .workbench .transmission-toggle:has(input:checked) { color:#d8e6ef; }
-.workbench .assembly-controls { flex:1; min-width:0; display:flex; align-items:center; gap:18px; padding:0; border:0; }
-.workbench .rotor-speed-control { flex:1; min-width:100px; width:auto; gap:1px; }
+.workbench .assembly-controls { flex:1; min-width:0; display:flex; align-items:center; gap:14px; padding:0; border:0; }
+.workbench .rotor-speed-control { flex:1; min-width:92px; width:auto; gap:0; }
 .workbench .rotor-speed-control label { color:var(--ui-muted); font-size:11px; gap:8px; }
-.workbench .rotor-speed-control b { color:var(--ui-ink); font:500 16px Bahnschrift,sans-serif; font-variant-numeric:tabular-nums; }
+.workbench .rotor-speed-control b { color:var(--ui-ink); font:500 14px Bahnschrift,sans-serif; font-variant-numeric:tabular-nums; }
 .workbench .rotor-speed-control small { color:var(--ui-muted); font-size:10px; margin-left:4px; font-weight:400; }
-.workbench #rotor-speed-slider { --speed-position:50%; appearance:none; width:100%; height:24px; margin:0; background:transparent; cursor:ew-resize; }
+.workbench #rotor-speed-slider { --speed-position:50%; appearance:none; width:100%; height:20px; margin:0; background:transparent; cursor:ew-resize; }
 .workbench #rotor-speed-slider::-webkit-slider-runnable-track { height:3px; border-radius:4px; background:linear-gradient(to right,#a5bdd0 var(--speed-position),#3c4b57 var(--speed-position)); }
 .workbench #rotor-speed-slider::-webkit-slider-thumb { appearance:none; width:12px; height:12px; margin-top:-4.5px; border:0; border-radius:50%; background:#e0e7ec; box-shadow:0 1px 4px #0006; }
 .workbench #rotor-speed-slider::-moz-range-track { height:3px; background:linear-gradient(to right,#a5bdd0 var(--speed-position),#3c4b57 var(--speed-position)); }
 .workbench #rotor-speed-slider::-moz-range-thumb { width:12px; height:12px; border:0; border-radius:50%; background:#e0e7ec; }
-.workbench #disassembly-open { min-height:40px; display:flex; align-items:center; justify-content:center; gap:8px; padding:0 14px; color:#19252d; border:0; border-radius:7px; background:var(--ui-gold); font-size:13px; font-weight:600; white-space:nowrap; }
-.workbench #disassembly-open:hover:not(:disabled) { background:#d9c28e; }
-.workbench #disassembly-open svg { width:17px; height:17px; }
+.workbench #disassembly-open { min-height:34px; display:flex; align-items:center; justify-content:center; gap:7px; padding:0 10px; color:#dce5eb; border:0; border-radius:4px; background:#ffffff0b; font-size:12px; font-weight:500; white-space:nowrap; }
+.workbench #disassembly-open:hover:not(:disabled) { background:#ffffff14; }
+.workbench #disassembly-open svg { width:16px; height:16px; color:#cbb786; }
 .workbench #disassembly-error { position:absolute; left:0; bottom:calc(100% + 16px); max-width:300px; padding:12px; color:#ffc3b4; background:#39272a; border-radius:8px; }
-.workbench .viewer-toolbar { position:relative; inset:auto; width:100%; transform:none; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.workbench .viewer-toolbar { position:relative; inset:auto; flex:0 0 auto; width:auto; transform:none; display:flex; align-items:center; gap:3px; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
 .workbench .navigation-modes { display:contents; }
 .workbench .viewer-toolbar > i { display:none; }
-.workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { min-width:0; height:44px; padding:0 6px; display:flex; align-items:center; justify-content:center; gap:7px; color:#b7c4ce; font-size:12px; font-weight:500; border:0; border-radius:7px; background:transparent; box-shadow:none; white-space:nowrap; }
-.workbench .viewer-toolbar button svg { width:17px; height:17px; }
+.workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { position:relative; width:36px; min-width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; gap:0; color:#aebfcb; font-size:12px; font-weight:400; border:0; border-radius:4px; background:transparent; box-shadow:none; white-space:nowrap; }
+.workbench .viewer-toolbar button svg { width:18px; height:18px; }
 .workbench .viewer-toolbar button:hover { color:#f0f5f8; background:#ffffff07; }
-.workbench .viewer-toolbar button.active { color:#e3eef5; background:#2b3e4c; border:0; box-shadow:none; }
+.workbench .viewer-toolbar button.active { color:#e0ebf3; background:#ffffff0c; border:0; box-shadow:none; }
 .workbench .viewer-toolbar button.sensor-layer.active { color:#f4ad9e; background:#492c2c; box-shadow:none; }
 .workbench .viewer-toolbar button.accent[aria-pressed="true"] { color:#e4ce9e; background:#39352b; border:0; box-shadow:none; }
-.workbench .viewer-toolbar .point-alarm-console { bottom:calc(100% + var(--dock-settings-height) + 24px); right:0; width:min(400px,100%); padding:10px; gap:8px; background:#17252e; border:1px solid #594442; border-radius:10px; box-shadow:0 10px 30px #0005; }
-.workbench .viewer-toolbar .point-alarm-console button { min-height:44px; height:44px; padding:0 12px; border:0; background:#963c32; color:#fff0e9; font-size:12px; }
+.workbench .viewer-toolbar .point-alarm-console { bottom:calc(100% + var(--dock-settings-height) + 24px); right:0; width:360px; max-width:calc(100vw - 32px); padding:10px; gap:8px; background:#17252e; border:1px solid #594442; border-radius:6px; box-shadow:0 8px 24px #0004; }
+.workbench .viewer-toolbar .point-alarm-console button { width:auto; min-width:0; min-height:40px; height:40px; padding:0 12px; border:0; background:#963c32; color:#fff0e9; font-size:12px; }
 
-/* The inspector is a legible, lightweight floating panel, with contextual content. */
-.workbench .inspector { top:24px; right:24px; bottom:24px; left:auto; width:var(--ui-rail); min-height:0; padding:18px 16px; border:1px solid #ffffff14; border-radius:12px; color:var(--ui-ink); background:var(--ui-panel); box-shadow:0 12px 40px #0002; animation:none; }
+/* Compact context inspector, aligned with the editor header. */
+.workbench .inspector { top:48px; right:0; bottom:0; left:auto; width:var(--ui-rail); min-height:0; padding:12px; border:0; border-left:1px solid var(--ui-line); border-radius:0; color:var(--ui-ink); background:var(--ui-panel); box-shadow:none; animation:none; }
 .workbench .inspector::after { display:none; }
-.inspector-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; padding:0 4px; margin-bottom:18px; }
-.workbench .inspector-heading h2 { margin:0; color:#edf2f6; font-family:inherit; font-size:16px; font-weight:600; line-height:1.4; letter-spacing:.02em; }
-.workbench #inspector-close { width:30px; height:30px; display:grid; place-items:center; padding:0; color:#9eafbc; background:transparent; border:0; border-radius:6px; cursor:pointer; }
+.inspector-heading { display:flex; align-items:center; justify-content:space-between; flex-shrink:0; padding:0 2px; margin-bottom:10px; }
+.workbench .inspector-heading h2 { margin:0; color:#d6e1e8; font-family:inherit; font-size:12px; font-weight:500; line-height:1.4; letter-spacing:0; }
+.workbench #inspector-close { width:26px; height:26px; display:grid; place-items:center; padding:0; color:#93a6b5; background:transparent; border:0; border-radius:4px; cursor:pointer; }
 .workbench #inspector-close:hover { color:#f0f5f8; background:#ffffff08; }
-.workbench #inspector-close svg { width:18px; height:18px; }
-.workbench .inspector-tabs { flex-shrink:0; display:grid; grid-template-columns:repeat(3,1fr); gap:0; margin:0; padding:0; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:transparent; }
-.workbench .inspector-tabs button { display:flex; align-items:center; justify-content:center; gap:6px; height:40px; min-height:40px; padding:0 4px; border:0; border-radius:0; color:#9baebb; background:transparent; font-size:13px; white-space:nowrap; }
+.workbench #inspector-close svg { width:15px; height:15px; }
+.workbench .inspector-tabs { flex-shrink:0; display:grid; grid-template-columns:repeat(3,1fr); gap:3px; margin:0; padding:0 0 12px; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:transparent; }
+.workbench .inspector-tabs button { display:flex; align-items:center; justify-content:center; gap:5px; height:28px; min-height:28px; padding:0 5px; border:0; border-radius:4px; color:#9dafbc; background:transparent; font-size:12px; white-space:nowrap; }
 .workbench .inspector-tabs button svg { display:none; }
-.workbench .inspector-tabs button.active { color:#edf2f6; font-weight:600; background:transparent; box-shadow:inset 0 -2px #c6ac75; }
+.workbench .inspector-tabs button.active { color:#e3edf4; font-weight:500; background:#ffffff09; box-shadow:none; }
 .workbench .inspector-tabs button:hover { color:#edf2f6; }
 .workbench .inspector-tabs button b { min-width:15px; height:15px; padding:0 3px; margin:0; border:0; border-radius:4px; background:#ffffff09; color:#9dabb7; font:10px/15px Bahnschrift,sans-serif; }
-.workbench .inspector .search-box { flex-shrink:0; display:grid; grid-template-columns:17px minmax(0,1fr); height:38px; min-height:38px; margin-top:18px; gap:8px; padding:0 10px; background:#ffffff05; border:1px solid #ffffff09; border-radius:7px; }
-.workbench .inspector .search-box input { color:var(--ui-ink); font-size:13px; }
+.workbench .inspector .search-box { flex-shrink:0; display:grid; grid-template-columns:15px minmax(0,1fr); height:32px; min-height:32px; margin-top:12px; gap:7px; padding:0 8px; background:#ffffff04; border:1px solid #ffffff06; border-radius:4px; }
+.workbench .inspector .search-box input { color:var(--ui-ink); font-size:12px; }
 .workbench .inspector .search-box input::placeholder,.workbench .inspector .search-box svg { color:#93a6b5; }
 .workbench .inspector .search-box:focus-within { border-color:#718b9f; box-shadow:none; }
-.assembly-summary { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; margin:22px 5px 10px; padding:0; color:#d6e0e8; font-size:12px; }
+.assembly-summary { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; margin:16px 4px 8px; padding:0; color:#c0cfda; font-size:11px; }
 .assembly-summary b { color:#9aabb7; font-size:10px; font-weight:400; }
 .workbench .inspector .part-results { margin:0; padding:0 0 12px; border:0; min-height:100px; }
-.workbench .inspector .tree-group { padding:0 0 8px; }
-.workbench .inspector .tree-group + .tree-group { margin-top:8px; border:0; }
-.workbench .tree-group-toggle { display:flex; align-items:center; width:100%; min-height:32px; padding:0 6px; gap:8px; color:#95a9b8; background:transparent; border:0; border-radius:5px; font-size:12px; font-weight:500; cursor:pointer; }
+.workbench .inspector .tree-group { padding:0 0 6px; }
+.workbench .inspector .tree-group + .tree-group { margin-top:6px; border:0; }
+.workbench .tree-group-toggle { display:flex; align-items:center; width:100%; min-height:28px; padding:0 4px; gap:7px; color:#91a6b5; background:transparent; border:0; border-radius:3px; font-size:11px; font-weight:400; cursor:pointer; }
 .workbench .tree-group-toggle:hover { background:#ffffff04; color:#d5e0e8; }
 .workbench .tree-group-toggle b { margin-left:auto; padding-right:4px; color:#92a4b2; font:11px Bahnschrift,sans-serif; }
 .workbench .tree-chevron { width:12px; height:12px; transition:transform 140ms; }
 .workbench .tree-group-toggle[aria-expanded="true"] .tree-chevron { transform:rotate(90deg); }
 .workbench .tree-group-items { margin-left:7px; padding-left:3px; border:0; }
-.workbench .inspector .part-row { min-height:40px; padding:8px 9px; display:grid; grid-template-columns:18px minmax(0,1fr) 9px; gap:10px; border:0; border-radius:6px; color:#cbd7df; opacity:1; animation:none; }
-.workbench .inspector .part-row strong { font-size:14px; font-weight:400; letter-spacing:0; line-height:1.5; color:inherit; }
+.workbench .inspector .part-row { min-height:34px; padding:6px 7px; display:grid; grid-template-columns:16px minmax(0,1fr) 7px; gap:8px; border:0; border-radius:4px; color:#cbd7df; opacity:1; animation:none; }
+.workbench .inspector .part-row strong { font-size:13px; font-weight:400; letter-spacing:0; line-height:1.5; color:inherit; }
 .workbench .inspector .part-row:hover { color:#edf3f7; background:#ffffff06; }
-.workbench .inspector .part-row.active { color:#edf3f7; background:#2a3e4d; box-shadow:none; }
+.workbench .inspector .part-row.active { color:#eef4f8; background:#ffffff09; box-shadow:none; }
 .workbench .tree-node::before { display:none; }
-.workbench .tree-node svg { width:17px; height:17px; color:#8ca3b5; }
+.workbench .tree-node svg { width:15px; height:15px; color:#8ca3b5; }
 .workbench .part-row.active .tree-node svg { color:#c9b582; }
-.workbench .inspector .visibility { color:#c9b582; font-size:9px; }
+.workbench .inspector .visibility { width:7px; min-width:0; color:#c9b582; font-size:9px; }
 .workbench .inspector .selected-card { margin-top:4px; padding:12px 4px; gap:8px; grid-template-columns:minmax(0,1fr) auto; border:0; border-bottom:1px solid var(--ui-line); background:transparent; }
 .workbench .inspector .selected-caption { display:block; margin-bottom:5px; font-size:10px; color:#9bafbd; }
-.workbench .inspector .selected-card strong { color:#e6eef5; font-size:17px; font-weight:500; }
+.workbench .inspector .selected-card strong { color:#e6eef5; font-size:15px; font-weight:500; }
 .workbench #clear-part-focus { grid-column:auto; height:32px; padding:0 4px; margin:0; border:0; color:#a5bdd0; background:transparent; font-size:11px; }
-.workbench .inspector .part-relations { margin:12px 0 16px; padding:12px; border:0; border-radius:8px; background:#ffffff04; max-height:min(40dvh,360px); }
+.workbench .inspector .part-relations { margin:10px 0 12px; padding:10px 0; border:0; border-bottom:1px solid var(--ui-line); border-radius:0; background:transparent; max-height:min(40dvh,360px); }
 .workbench .inspector .part-relations h3 { color:#dce6ec; font-size:12px; font-weight:500; }
 .workbench .inspector .relation-legend { gap:10px; margin:10px 0; font-size:10px; }
 .workbench .relation-legend .current { color:#ced8e0; }
@@ -124,7 +124,7 @@
 .workbench .relation-associated { border-color:var(--ui-line); }
 .workbench .relation-direction-group { grid-template-columns:62px minmax(0,1fr); }
 .workbench .inspector .part-relations .relation-path-badge { color:inherit; font-size:9px; }
-.workbench .inspector-toggle { display:none; }
+.workbench .inspector-toggle { position:absolute; z-index:5; top:6px; right:12px; min-height:36px; align-items:center; justify-content:center; padding:0 12px; background:transparent; border:0; border-radius:4px; color:#b8cbd8; font-size:12px; cursor:pointer; }
 .workbench.inspector-collapsed { --scene-right:0px; }
 .workbench.inspector-collapsed .inspector { display:none; }
 .workbench.inspector-collapsed .inspector-toggle { display:flex; }
@@ -179,44 +179,44 @@
 .workbench .sensor-current b[data-status="warning"] { color:#e2c78d; }
 .workbench .sensor-current b[data-status="alarm"] { color:#ee9b8b; }
 .workbench .inspector #sensor-trend { border:0; border-radius:7px; background:#101c24; }
-.workbench .generator-guide { top:112px; left:24px; width:280px; padding:16px; color:var(--ui-ink); background:var(--ui-panel); border:1px solid var(--ui-line); border-radius:10px; }
+.workbench .generator-guide { top:64px; left:16px; width:264px; padding:12px; color:var(--ui-ink); background:var(--ui-panel); border:1px solid var(--ui-line); border-radius:6px; }
 .workbench .generator-guide h2 { color:#e2e8ed; font-size:15px; }
 .workbench .generator-view-switch { border:0; background:#ffffff04; border-radius:6px; }
 .workbench .generator-view-switch button { color:#a4b2be; }
 .workbench .generator-view-switch button[aria-pressed="true"] { color:#e0ebf3; background:#2a3e4d; box-shadow:none; }
 .workbench :is(#generator-internal-detail,.generator-detail-actions button) { color:#cadce8; background:#ffffff05; border:1px solid var(--ui-line); border-radius:6px; }
-.workbench .alarm-banner { top:112px; left:24px; right:calc(var(--scene-right) + 24px); max-width:none; }
+.workbench .alarm-banner { top:64px; left:16px; right:calc(var(--scene-right) + 16px); max-width:none; }
 
 /* Disassembly uses the same two floating surfaces and typography. */
-.workbench .disassembly-header { top:20px; left:24px; right:24px; min-height:64px; padding:12px 16px; background:var(--ui-panel); border:1px solid #ffffff14; border-radius:12px; color:var(--ui-ink); box-shadow:0 8px 30px #0002; }
+.workbench .disassembly-header { top:0; left:0; right:0; min-height:52px; padding:8px 16px; background:var(--ui-panel); border:0; border-bottom:1px solid var(--ui-line); border-radius:0; color:var(--ui-ink); box-shadow:none; }
 .workbench .disassembly-heading { gap:12px; }
-.workbench .disassembly-heading h1 { font:600 17px/1.4 "Microsoft YaHei UI",sans-serif; letter-spacing:0; }
+.workbench .disassembly-heading h1 { font:500 14px/1.4 "Microsoft YaHei UI",sans-serif; letter-spacing:0; }
 .workbench #disassembly-count { color:#9bafbd; font-size:11px; }
-.workbench #disassembly-page button { min-height:40px; padding:0 12px; color:#d2dfe8; background:#ffffff06; border:0; border-radius:6px; font-size:12px; box-shadow:none; }
+.workbench #disassembly-page button { min-height:32px; padding:0 10px; color:#c9d7e0; background:#ffffff06; border:0; border-radius:4px; font-size:12px; box-shadow:none; }
 .workbench #disassembly-page button:hover { background:#ffffff0e; }
 .workbench #disassembly-page button[aria-pressed="true"] { color:#e3cc99; background:#39352b; border:0; }
 .workbench #disassembly-close { background:transparent; color:#a5bdd0; padding-left:12px; }
 .workbench #disassembly-close::before { display:none; }
-.workbench .disassembly-filters :is(select,input) { height:40px; color:#d4e0e8; background:#ffffff04; border:1px solid #ffffff0e; border-radius:6px; font-size:12px; }
+.workbench .disassembly-filters :is(select,input) { height:32px; color:#d4e0e8; background:#ffffff04; border:1px solid #ffffff09; border-radius:4px; font-size:12px; }
 .workbench .disassembly-filters select { width:150px; }
-.workbench .disassembly-timeline { width:min(580px,calc(100% - 48px)); bottom:24px; padding:14px 16px; background:var(--ui-panel); border:1px solid #ffffff18; border-radius:12px; color:var(--ui-ink); box-shadow:0 10px 32px #0004; }
+.workbench .disassembly-timeline { width:min(520px,calc(100% - 32px)); bottom:16px; padding:10px 12px; background:var(--ui-panel); border:1px solid #ffffff12; border-radius:7px; color:var(--ui-ink); box-shadow:0 4px 16px #0003; }
 .workbench .disassembly-actions [role="group"] { gap:4px; padding:0; border:0; background:transparent; }
-.workbench #disassembly-play { color:#c7d9e6!important; border-color:transparent!important; background:#293d4a; }
+.workbench #disassembly-play { color:#d3e1eb!important; border-color:transparent!important; background:#ffffff0b; }
 .workbench :is(#disassembly-stage,.disassembly-progress,.disassembly-caption label,.disassembly-timeline p) { color:#9bafbd; font-size:11px; }
 .workbench .disassembly-progress input { min-height:24px; accent-color:#c6ac75; }
 .workbench .disassembly-progress output { font:12px Bahnschrift,sans-serif; color:#e2e8ed; text-align:right; }
-.workbench #disassembly-list { top:104px; right:24px; bottom:184px; width:280px; color:#d5e1e9; border:1px solid #ffffff14; background:var(--ui-panel); border-radius:10px; }
+.workbench #disassembly-list { top:68px; right:16px; bottom:150px; width:264px; color:#d5e1e9; border:1px solid var(--ui-line); background:var(--ui-panel); border-radius:6px; }
 .workbench #disassembly-list-items button { border-radius:0; border-bottom:1px solid var(--ui-line); background:transparent; }
 .workbench #disassembly-list-items span { color:#b8ccdb; }
 .workbench #disassembly-list-items small { color:#a4b2be; }
 .workbench #disassembly-labels button { min-height:28px; padding:4px 9px; color:#d4e2eb; background:#1d303de8; border:1px solid #536c7b66; border-radius:6px; font-size:11px; }
-.workbench #disassembly-selection { bottom:184px; padding:10px 14px; background:var(--ui-panel); color:#dfe8ef; border:1px solid #ffffff18; border-radius:9px; box-shadow:0 8px 24px #0003; }
+.workbench #disassembly-selection { bottom:150px; padding:8px 12px; background:var(--ui-panel); color:#dfe8ef; border:1px solid var(--ui-line); border-radius:5px; box-shadow:0 4px 16px #0003; }
 .workbench #disassembly-selection small { color:#a4b2be; font-size:11px; }
 .workbench :is(#disassembly-busy,#disassembly-empty) { background:var(--ui-panel); color:#e2e8ed; border-color:var(--ui-line); border-radius:10px; }
 
 @media (min-width:901px) and (max-width:1180px) {
-  :root { --ui-rail:286px; }
-  .workbench .inspector { padding:16px 14px; }
+  :root { --ui-rail:264px; }
+  .workbench .inspector { padding:12px; }
   .workbench .inspector .part-row strong { font-size:13px; }
   .workbench .control-deck.transmission-control,.workbench .assembly-controls { gap:12px; }
   .workbench .rotor-speed-control { min-width:90px; }
@@ -227,13 +227,13 @@
 }
 @media (max-width:900px),(pointer:coarse) and (max-width:1400px) {
   :root { --scene-right:0px; --dock-settings-height:92px; }
-  .workbench-header { top:calc(10px + env(safe-area-inset-top)); left:max(12px,env(safe-area-inset-left)); padding:8px 10px; grid-template-columns:24px auto; gap:0 8px; }
+  .workbench-header { top:0; left:0; right:0; height:calc(56px + env(safe-area-inset-top)); padding:env(safe-area-inset-top) 14px 0; }
   .workbench-identity svg { width:24px; height:24px; }
-  .workbench-identity h1 { font-size:18px; }
+  .workbench-identity h1 { font-size:14px; }
   .workbench-context { display:none; }
   .workbench .inspector-toggle { display:flex; top:calc(10px + env(safe-area-inset-top)); right:max(12px,env(safe-area-inset-right)); min-height:44px; padding:0 12px; font-size:12px; }
-  .workspace-dock { bottom:max(12px,env(safe-area-inset-bottom)); left:50%; width:calc(100% - 24px); max-width:580px; gap:6px; padding:6px; border-radius:12px; }
-  .workbench .control-deck.transmission-control { min-height:92px; padding:0 6px 6px; display:grid; grid-template-columns:minmax(0,1fr) 112px; gap:0 12px; }
+  .workspace-dock { bottom:max(12px,env(safe-area-inset-bottom)); left:50%; width:calc(100% - 24px); max-width:580px; display:flex; flex-direction:column; gap:6px; padding:6px; border-radius:8px; }
+  .workbench .control-deck.transmission-control { flex:none; width:100%; border-right:0; border-bottom:1px solid var(--ui-line); min-height:92px; padding:0 6px 6px; display:grid; grid-template-columns:minmax(0,1fr) 112px; gap:0 12px; }
   .workbench .transmission-toggle { grid-column:1; grid-row:1; min-height:44px; font-size:12px; }
   .workbench .assembly-controls { display:contents; }
   .workbench #disassembly-open { grid-column:2; grid-row:1; min-height:44px; padding:0 10px; font-size:12px; }
@@ -241,11 +241,12 @@
   .workbench .rotor-speed-control label { flex-shrink:0; gap:10px; font-size:11px; }
   .workbench .rotor-speed-control b { font-size:14px; }
   .workbench #rotor-speed-slider { height:42px; flex:1; min-width:0; }
-  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { height:52px; flex-direction:column; gap:5px; padding:4px 0; font-size:11px; }
+  .workbench .viewer-toolbar { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); width:100%; }
+  .workbench .viewer-toolbar button,.workbench .viewer-toolbar button.accent { width:auto; min-width:0; height:52px; flex-direction:column; gap:5px; padding:4px 0; font-size:11px; }
   .workbench .viewer-toolbar button svg { width:19px; height:19px; }
   .workbench .viewer-toolbar .point-alarm-console { right:0; width:100%; padding:8px; }
   .workbench .viewer-toolbar .point-alarm-console button { height:44px; padding:0 8px; font-size:12px; }
-  .workbench .inspector { top:auto; left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); bottom:calc(186px + env(safe-area-inset-bottom)); width:auto; height:min(32dvh,280px); padding:8px 12px 12px; border-radius:12px; }
+  .workbench .inspector { top:auto; left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); bottom:calc(186px + env(safe-area-inset-bottom)); width:auto; height:min(32dvh,280px); padding:8px 12px 12px; border:1px solid var(--ui-line); border-radius:8px; }
   .workbench .inspector-heading { display:none; }
   .workbench .inspector-heading h2 { font-size:14px; }
   .workbench #inspector-close { min-width:44px; min-height:44px; }
@@ -265,7 +266,7 @@
   .workbench .alarm-banner { top:76px; left:12px; right:12px; }
   .workbench.demo-alarm-active { --dock-settings-height:0px; }
   .workbench.demo-alarm-active .control-deck.transmission-control { display:none; }
-  .workbench .disassembly-header { top:calc(8px + env(safe-area-inset-top)); left:12px; right:12px; padding:8px; gap:8px; }
+  .workbench .disassembly-header { top:0; left:0; right:0; padding:calc(8px + env(safe-area-inset-top)) 12px 8px; gap:8px; }
   .workbench .disassembly-heading { width:100%; gap:6px; }
   .workbench .disassembly-heading h1 { font-size:14px; }
   .workbench #disassembly-page button { min-height:44px; padding:0 9px; font-size:11px; }
@@ -312,4 +313,13 @@
   .workbench #disassembly-selection { bottom:118px; }
   .workbench #disassembly-list { top:76px; bottom:118px; left:auto; right:12px; width:250px; height:auto; }
 }
+
+.workbench .viewer-toolbar button[data-tooltip]>span { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.workbench .viewer-toolbar button[data-tooltip]::after { content:attr(data-tooltip); position:absolute; bottom:calc(100% + 12px); left:50%; transform:translateX(-50%); padding:6px 9px; border:1px solid #ffffff14; border-radius:4px; background:#263642; color:#e2e8ed; font-size:11px; line-height:1.4; font-weight:400; opacity:0; visibility:hidden; pointer-events:none; transition:opacity 120ms; white-space:nowrap; }
+.workbench .viewer-toolbar button[data-tooltip]:is(:hover,:focus-visible)::after { opacity:1; visibility:visible; }
+@media (max-width:900px),(pointer:coarse) and (max-width:1400px) {
+  .workbench .viewer-toolbar button[data-tooltip]>span { position:static; width:auto; height:auto; padding:0; margin:0; overflow:visible; clip-path:none; }
+  .workbench .viewer-toolbar button[data-tooltip]::after { display:none; }
+}
+
 @media (prefers-reduced-motion:reduce) { .workbench *, .workbench *::before, .workbench *::after { transition:none!important; } }

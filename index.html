@@ -11,7 +11,7 @@
   <body>
     <div id="app" class="workbench">
       <canvas id="viewer" aria-label="风机三维模型查看器"></canvas>
-      <header class="workbench-header">
+      <header class="workbench-header" aria-label="风机编辑器">
         <div class="workbench-identity">
           <i data-ui-icon="Wind"></i>
           <h1>风机结构</h1>
@@ -265,14 +265,14 @@
       </section>
       <nav class="viewer-toolbar surface-panel" aria-label="三维导航工具">
         <div class="navigation-modes" role="group" aria-label="视角操作模式">
-        <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><i data-ui-icon="Orbit"></i><span>旋转</span></button>
-        <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><i data-ui-icon="Move"></i><span>平移</span></button>
+        <button id="navigation-orbit" aria-label="旋转" data-tooltip="旋转 · 1" class="active" type="button" aria-pressed="true"><i data-ui-icon="Orbit"></i><span>旋转</span></button>
+        <button id="navigation-pan" aria-label="平移" data-tooltip="平移 · 2" type="button" aria-pressed="false"><i data-ui-icon="Move"></i><span>平移</span></button>
         </div>
         <i aria-hidden="true"></i>
-        <button id="navigation-reset" type="button" title="复位视角"><i data-ui-icon="RotateCcw"></i><span>复位视角</span></button>
+        <button id="navigation-reset" aria-label="复位视角" data-tooltip="复位视角" type="button"><i data-ui-icon="RotateCcw"></i><span>复位视角</span></button>
         <i aria-hidden="true"></i>
-        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console" title="报警点位"><i data-ui-icon="MapPin"></i><span>报警点位</span></button>
-        <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注"><i data-ui-icon="PencilLine"></i><span>添加标注</span></button>
+        <button id="sensor-layer-toggle" aria-label="报警点位" data-tooltip="报警点位" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console"><i data-ui-icon="MapPin"></i><span>报警点位</span></button>
+        <button id="annotation-toggle" aria-label="添加标注" data-tooltip="添加标注" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel"><i data-ui-icon="PencilLine"></i><span>添加标注</span></button>
         <section id="point-alarm-console" class="point-alarm-console alarm-console" aria-label="报警点位演示" hidden>
           <label class="sr-only" for="point-alarm-source">选择演示告警测点</label>
           <select id="point-alarm-source" disabled></select>
