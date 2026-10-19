@@ -112,7 +112,9 @@ export class MotionRenderer {
     this.scene.clear();this.lights.forEach(light=>this.scene.add(light));
     this.activeDrawables=0;
     for(const {source,proxy}of this.bindings)if(proxy.visible){
-      proxy.geometry=this.renderGeometry(source.geometry);this.scene.add(proxy);this.activeDrawables++;
+      // A transient selection coat reuses CAD geometry; re-indexing on the
+      // first click would stall picking a large blade or enclosure.
+      proxy.geometry=source.userData.precisionOverlay?source.geometry:this.renderGeometry(source.geometry);this.scene.add(proxy);this.activeDrawables++;
     }
     for(const batch of this.batches)if(batch.proxy.visible){this.scene.add(batch.proxy);this.activeDrawables++;}
     this.bindingsDirty=false;this.syncCount++;

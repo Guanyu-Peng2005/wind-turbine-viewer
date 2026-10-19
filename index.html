@@ -22,6 +22,7 @@
 
       <div class="annotation-overlay" id="annotation-overlay" aria-live="polite"></div>
       <div class="sensor-overlay" id="sensor-overlay" aria-live="polite"></div>
+      <div id="selection-anchor" aria-hidden="true" hidden><span></span></div>
       <div id="alarm-edge" class="alarm-edge" aria-hidden="true" hidden></div>
       <section id="alarm-banner" class="alarm-banner" aria-label="演示告警" hidden>
         <div class="alarm-symbol" aria-hidden="true">!</div>
@@ -80,8 +81,9 @@
         <div class="assembly-summary"><span id="assembly-summary-title">整机装配</span><b id="assembly-count">加载中</b></div>
 
         <div class="selected-card" id="selected-card" hidden>
-          <div><small class="selected-caption">当前零件</small><strong id="selected-name"></strong></div>
+          <div><small class="selected-caption" id="selected-caption">当前零件</small><strong id="selected-name"></strong></div>
           <button id="clear-part-focus" type="button" disabled>清除选择</button>
+          <button id="annotate-selected-point" type="button" hidden>在选中位置标注</button>
         </div>
 
         <div class="part-actions" role="group" aria-label="选中零件操作">
@@ -252,6 +254,7 @@
 
 
       <div class="workspace-dock" role="group" aria-label="模型操作台">
+      <button id="precision-resume" type="button" hidden title="恢复精确观察前的转速">继续转动</button>
       <section class="control-deck transmission-control surface-panel" aria-label="传动结构展示">
         <label class="transmission-toggle" title="内部为典型传动结构示意，未经厂家参数验证。"><input id="show-internals" type="checkbox" disabled /><span>传动结构透视</span></label>
         <div class="assembly-controls">

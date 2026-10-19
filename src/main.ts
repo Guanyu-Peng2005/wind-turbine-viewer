@@ -18,6 +18,7 @@ import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
 import { normalizeRotorSpeed } from './rotor-speed';
+import { captureSurfacePoint, surfaceWorldPoint, surfaceWorldBounds, precisionFocusPlan, SurfaceTapSequence, type SurfacePoint } from './precision-selection';
 import { partIcon, treeChevron, initializeWorkbenchIcons, wireWorkbenchKeyboard } from './workbench-ui';
 import { DisassemblyView, type DisassemblySource } from './disassembly-view';
 import { brakeDisplayVariants } from './brake-representation';
@@ -63,6 +64,7 @@ type IndustrialMaterialProfile = {
 type AnnotationSeverity = '一般' | '注意' | '重要' | '紧急';
 type AnnotationStatus = '待处理' | '处理中' | '已完成';
 type AnnotationViewpoint = {
+  anchorWorldPosition?:[number,number,number];
   cameraPosition: [number, number, number];
   cameraUp: [number, number, number];
   target: [number, number, number];
@@ -75,6 +77,7 @@ type EngineeringAnnotation = {
   id: string;
   sequence: number;
   partLabel: string;
+  componentLabel?:string;
   meshPath: number[];
   binding?:AnchorBinding;
   localPosition: [number, number, number];
@@ -213,6 +216,12 @@ selectionBox.material.opacity = 0.86;
 selectionBox.visible = false;
 selectionBox.layers.set(MOVING_LAYER);
 scene.add(selectionBox);
+const precisionHighlightGeometry=new THREE.SphereGeometry(.001,6,4);
+const precisionHighlightMaterial=new THREE.MeshBasicMaterial({color:0xe6c88b,transparent:true,opacity:.24,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1});
+const precisionHighlight:THREE.Mesh=new THREE.Mesh(precisionHighlightGeometry,precisionHighlightMaterial);
+precisionHighlight.name='精确选择高亮';precisionHighlight.userData.precisionOverlay=true;
+precisionHighlight.visible=false;precisionHighlight.frustumCulled=false;precisionHighlight.matrixAutoUpdate=false;precisionHighlight.matrixWorldAutoUpdate=false;
+precisionHighlight.layers.set(MOVING_LAYER);precisionHighlight.renderOrder=30;scene.add(precisionHighlight);
 
 const sectionPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);
 const modelBounds = new THREE.Box3();
@@ -353,6 +362,12 @@ let rotorSpinning = false;
 let parts: PartRecord[] = [];
 let majorPartGroups: MajorPartGroup[] = [];
 let selectedPart: PartRecord | null = null;
+type PrecisionPick={surface:SurfacePoint;owner:PartRecord;component:PartRecord|null;label:string};
+let precisionSelection:PrecisionPick|null=null;
+const modelTaps=new SurfaceTapSequence<PrecisionPick|null>();
+let lastTreeTap:{part:PartRecord;time:number;x:number;y:number}|null=null;
+let inspectionResumeRpm:number|null=null;
+let precisionCameraFlight:{start:number;from:THREE.Vector3;fromTarget:THREE.Vector3;to:THREE.Vector3;target:THREE.Vector3}|null=null;
 let partFocusActive = false;
 let displayMode: DisplayMode = 'solid';
 let isIsolated = false;
@@ -616,6 +631,7 @@ function restingRenderScale(): number {
 }
 
 function beginInteractiveRender(): void {
+  cancelPrecisionFlight();
   if (detailRestoreTimer) clearTimeout(detailRestoreTimer);
   cameraMotionActive = true;
   homeFramingActive=false;
@@ -623,6 +639,7 @@ function beginInteractiveRender(): void {
 
 function endInteractiveRender(): void {
   cameraMotionActive = false;
+  if(precisionCameraFlight)return;
   if (interactionLod?.active || contextMaterialLod?.active || renderer.getPixelRatio() < Math.min(devicePixelRatio, 1)) {
     detailRestoreTimer = setTimeout(restoreFullDetail, 120);
   }
@@ -1482,6 +1499,7 @@ function presentationFrame():PresentationFrame{
   let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-(compact?20:20*desktopUiScale));
   if(simulationControls.height&&simulationControls.top>=canvasRect.top+viewportHeight*.5)bottom=Math.min(bottom,simulationControls.top-canvasRect.top-margin);
   if(!pointAlarmConsole.hidden)bottom=Math.min(bottom,pointAlarmConsole.getBoundingClientRect().top-canvasRect.top-margin);
+  const resume=byId('precision-resume');if(!resume.hidden)bottom=Math.min(bottom,resume.getBoundingClientRect().top-canvasRect.top-margin);
   if(panel.width&&panel.height&&(!compact||mobileInspectorOpen)){
     if(panel.left-canvasRect.left>viewportWidth*.45)right=Math.min(right,panel.left-canvasRect.left-margin);
     else bottom=Math.min(bottom,panel.top-canvasRect.top-margin);
@@ -1667,7 +1685,9 @@ function updateSelectedUI(): void {
   hideButton.disabled = !enabled;
   clearPartFocusButton.disabled = !enabled;
   byId('selected-card').hidden = !selectedPart;
-  byId('selected-name').textContent = selectedPart?.label ?? '';
+  byId('selected-name').textContent = precisionSelection?.label ?? selectedPart?.label ?? '';
+  byId('selected-caption').textContent=precisionSelection&&precisionSelection.label!==selectedPart?.label?`${selectedPart?.label} · 当前零件`:'当前零件';
+  byId('annotate-selected-point').hidden=!precisionSelection;
   renderPartRelations();
 }
 
@@ -1681,7 +1701,7 @@ function renderPartRelations():void{
       const name=document.createElement('span');name.textContent=entry.label;button.append(name);
       if(entry.badge){const badge=document.createElement('small');badge.className='relation-path-badge';badge.textContent=entry.badge;button.append(badge);}
       button.title=entry.hint;button.setAttribute('aria-label',`查看关联零件：${entry.label}`);
-      button.addEventListener('click',()=>{const part=majorPartByLabel(entry.label);if(part)selectPart(part,true,true);});container.append(button);}
+      button.addEventListener('click',event=>{const part=majorPartByLabel(entry.label);if(part)selectTreePart(part,event);});container.append(button);}
   };
   for(const direction of ['upstream','downstream'] as const){
     const paths=direction==='upstream'?selectedRelationships.upstreamPaths:selectedRelationships.downstreamPaths;
@@ -1738,7 +1758,8 @@ function fitPartWithRelations(part:PartRecord):void{
   fitBounds(bounds,new THREE.Vector3(1,.55,1.4),1.2,orbitCenter,part.label==='主机架'||compactViewport.matches?presentationFrame():undefined);
 }
 
-function selectPart(part: PartRecord | null, focus = false, activateFocus = false): void {
+function selectPart(part: PartRecord | null, focus = false, activateFocus = false, recenter = true): void {
+  clearPrecisionSelection();
   restoreFullDetail();
   selectedPart = part;
   partFocusActive = Boolean(part && activateFocus);
@@ -1750,7 +1771,105 @@ function selectPart(part: PartRecord | null, focus = false, activateFocus = fals
     if(selectedRelationships&&!isIsolated)fitPartWithRelations(part);
     else if (isGeneratorChainFocus() && !isIsolated) fitGeneratorPresentation();
     else fitPartWithRelations(part);
-  }else if(part)centerOrbitOnPart(part);
+  }else if(part&&recenter)centerOrbitOnPart(part);
+}
+
+function surfaceComponentLabel(surface:SurfacePoint,owner:PartRecord|null):string{
+  if(owner?.label==='叶片')return '叶片';
+  const source=surface.mesh;
+  let label='';
+  for(let node:THREE.Object3D|null=source;node&&!label;node=node.parent){label=leafNodeName(node).match(/[\u3400-\u9fff][\u3400-\u9fff\d×（）·、 .-]*/)?.[0]?.replace(/[-.\s]+$/,'')??'';}
+  label||=owner?.label??'零件';
+  if(/^(风轮外形|机舱外形|装配|模型)$/.test(label))label=owner?.label??label;
+  return surface.instanceId===undefined?label:`${label} · 第${surface.instanceId+1}件`;
+}
+
+function precisionPickFromHit(hit:THREE.Intersection):PrecisionPick|null{
+  const surface=captureSurfacePoint(hit);if(!surface)return null;
+  const owner=spatialOwner.get(surface.mesh)??majorPartForMesh(surface.mesh);if(!owner)return null;
+  const leaf=meshToPart.get(surface.mesh);
+  const component=surface.instanceId===undefined&&leaf&&leaf.node!==owner.node&&!leaf.members?leaf:null;
+  return {surface,owner,component,label:surfaceComponentLabel(surface,owner)};
+}
+
+function precisionPickContains(pick:PrecisionPick,mesh:THREE.Mesh):boolean{
+  return pick.surface.instanceId!==undefined?mesh===pick.surface.mesh:pick.component?belongsToPart(mesh,pick.component):mesh===pick.surface.mesh;
+}
+
+function clearPrecisionSelection():void{
+  cancelPrecisionFlight();precisionSelection=null;precisionHighlight.visible=false;
+  byId('selection-anchor').hidden=true;byId('annotate-selected-point').hidden=true;
+  invalidateStaticFrame();
+}
+
+function selectPrecisionPick(pick:PrecisionPick):void{
+  // A single click changes selection only: no camera translation, pivot or zoom.
+  selectPart(pick.owner,false,true,false);precisionSelection=pick;
+  updateSelectedUI();updatePrecisionVisual();invalidateStaticFrame();
+}
+
+function pauseForPrecision():void{
+  if(rotorSpinning&&drivetrain&&drivetrain.rpm>0){inspectionResumeRpm??=drivetrain.rpm;setRotorSpeed(0);}
+  byId('precision-resume').hidden=inspectionResumeRpm===null;
+}
+
+function resumePrecisionMotion():void{
+  const rpm=inspectionResumeRpm;inspectionResumeRpm=null;byId('precision-resume').hidden=true;
+  if(rpm!==null)setRotorSpeed(rpm);
+}
+
+function cancelPrecisionFlight():void{
+  if(!precisionCameraFlight)return;
+  precisionCameraFlight=null;restoreFullDetail();invalidateStaticFrame(false);
+}
+
+function flyToPrecisionBounds(bounds:THREE.Box3,point:THREE.Vector3,forceLocal=false):void{
+  cancelPrecisionFlight();pauseForPrecision();restoreFullDetail();
+  const frame=presentationFrame(),referenceSpan=homeViewBounds?.getSize(new THREE.Vector3()).length()??drivetrain?.bounds.getSize(new THREE.Vector3()).length()??20;
+  const plan=precisionFocusPlan({bounds,point,camera,direction:camera.position.clone().sub(controls.target),frame,viewportHeight,referenceSpan,forceLocal});
+  homeFramingActive=false;applyPresentationOffset(frame);
+  camera.near=Math.max(plan.distance/1000,1e-6);camera.far=Math.max(referenceSpan*20,plan.distance*30,100);camera.updateProjectionMatrix();
+  controls.minDistance=Math.max(plan.distance*.01,1e-6);controls.maxDistance=Math.max(referenceSpan*6,plan.distance*20);
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){camera.position.copy(plan.position);controls.target.copy(plan.center);updateCameraPreset();}
+  else{
+    precisionCameraFlight={start:performance.now(),from:camera.position.clone(),fromTarget:controls.target.clone(),to:plan.position,target:plan.center};
+    interactionLod?.setActive(true);navigationRendering=true;setRenderScale(renderQuality.navigationScale);
+  }
+  invalidateStaticFrame();
+}
+
+function focusPrecisionPick(pick:PrecisionPick):void{
+  modelTaps.clear();selectPrecisionPick(pick);pauseForPrecision();
+  const point=surfaceWorldPoint(pick.surface),bounds=pick.component?partBounds(pick.component):surfaceWorldBounds(pick.surface);
+  flyToPrecisionBounds(bounds,point,pick.owner.label==='叶片');
+}
+
+function selectTreePart(part:PartRecord,event:MouseEvent):void{
+  modelTaps.clear();lastTreeTap=event.detail>0?{part,time:performance.now(),x:event.clientX,y:event.clientY}:null;
+  selectPart(part,false,true,false);
+}
+
+function updatePrecisionFlight(now:number):void{
+  const flight=precisionCameraFlight;if(!flight)return;
+  const t=Math.min(1,Math.max(0,(now-flight.start)/260)),eased=1-(1-t)**3;
+  camera.position.lerpVectors(flight.from,flight.to,eased);controls.target.lerpVectors(flight.fromTarget,flight.target,eased);
+  updateCameraPreset();invalidateStaticFrame(false);
+  if(t===1){precisionCameraFlight=null;restoreFullDetail();invalidateStaticFrame(false);}
+}
+
+function updatePrecisionVisual():void{
+  const pick=precisionSelection,marker=byId('selection-anchor');
+  const visible=!!pick&&worldVisible(pick.surface.mesh)&&!partsPageOpen;
+  if(precisionHighlight.visible!==visible){precisionHighlight.visible=visible;invalidateStaticFrame();}
+  if(!pick||!visible){marker.hidden=true;return;}
+  precisionHighlight.geometry=pick.surface.geometry;precisionHighlight.matrixWorld.copy(pointWorldMatrix(pick.surface.mesh,pick.surface.instanceId));
+  const point=surfaceWorldPoint(pick.surface).project(camera);
+  marker.hidden=!annotationPanel.hidden||point.z<=-1||point.z>=1||Math.abs(point.x)>1||Math.abs(point.y)>1;
+  if(marker.hidden)return;
+  marker.style.left=`${overlayOffsetX+(point.x*.5+.5)*viewportWidth}px`;
+  marker.style.top=`${overlayOffsetY+(-point.y*.5+.5)*viewportHeight}px`;
+  marker.classList.toggle('label-left',point.x>0.4);
+  const label=marker.querySelector('span')!;if(label.textContent!==pick.label)label.textContent=pick.label;
 }
 
 function objectPathFromModelRoot(object: THREE.Object3D): number[] {
@@ -1810,6 +1929,10 @@ function annotationWorldPoint(annotation: EngineeringAnnotation): THREE.Vector3 
   return anchorWorldPoint(mesh,annotation.localPosition,annotation.binding);
 }
 
+function annotationPartDescription(annotation:EngineeringAnnotation):string{
+  return annotation.componentLabel&&annotation.componentLabel!==annotation.partLabel?`${annotation.partLabel} / ${annotation.componentLabel}`:annotation.partLabel;
+}
+
 function captureAnnotationViewpoint(): AnnotationViewpoint {
   return {
     cameraPosition: camera.position.toArray(),
@@ -1830,6 +1953,7 @@ function isAnnotationViewpoint(value: unknown): value is AnnotationViewpoint {
     &&(viewpoint.framing===undefined||viewpoint.framing==='presentation'||viewpoint.framing==='full')
     &&(viewpoint.viewport===undefined||(Array.isArray(viewpoint.viewport)&&viewpoint.viewport.length===2&&viewpoint.viewport.every(v=>Number.isFinite(v)&&v>0)))
     &&(viewpoint.inputAngle===undefined||Number.isFinite(viewpoint.inputAngle))
+    &&(viewpoint.anchorWorldPosition===undefined||finiteVector(viewpoint.anchorWorldPosition))
     &&(viewpoint.projection===undefined||(!!viewpoint.projection&&typeof viewpoint.projection==='object'&&Number.isFinite(viewpoint.projection.fov)&&viewpoint.projection.fov>0&&viewpoint.projection.fov<180
       &&Number.isFinite(viewpoint.projection.near)&&viewpoint.projection.near>0&&Number.isFinite(viewpoint.projection.far)&&viewpoint.projection.far>viewpoint.projection.near
       &&Number.isFinite(viewpoint.projection.zoom)&&viewpoint.projection.zoom>0));
@@ -1850,6 +1974,7 @@ function isStoredAnnotation(value: unknown): value is EngineeringAnnotation {
   return typeof item.id === 'string'
     && Number.isInteger(item.sequence)&&Number(item.sequence)>0
     && typeof item.partLabel === 'string'
+    && (item.componentLabel===undefined||typeof item.componentLabel==='string')
     && Array.isArray(item.meshPath)&&item.meshPath.every(i=>Number.isInteger(i)&&i>=0)
     && finiteVector(item.localPosition)&&finiteVector(item.localNormal)
     && (item.binding===undefined||validBinding(item.binding))
@@ -1921,7 +2046,7 @@ function setAnnotationMode(active: boolean): void {
   annotationToggle.setAttribute('aria-pressed', String(active));
   canvas.classList.toggle('annotation-active', active);
   setAnnotationTip(
-    active ? '点击模型表面放置标注。' : '',
+    active ? (precisionSelection?'点击当前选中零件表面，放置精确标注。':'点击模型表面放置精确标注。') : '',
     active,
   );
 }
@@ -1976,7 +2101,7 @@ function renderAnnotationMarkers(): void {
     const title = document.createElement('b');
     title.textContent = annotation.title || '待填写标注';
     const meta = document.createElement('small');
-    meta.textContent = `${annotation.partLabel} · ${annotation.status}`;
+    meta.textContent = `${annotationPartDescription(annotation)} · ${annotation.status}`;
     label.append(title, meta);
     marker.append(label);
     marker.addEventListener('pointerdown', (event) => event.stopPropagation());
@@ -2034,7 +2159,7 @@ function renderAnnotationList(): void {
     const title = document.createElement('strong');
     title.textContent = annotation.title || '待填写标注';
     const meta = document.createElement('small');
-    meta.textContent = `${annotation.partLabel} · ${annotationMesh(annotation)?annotation.status:'定位待确认'}`;
+    meta.textContent = `${annotationPartDescription(annotation)} · ${annotationMesh(annotation)?annotation.status:'定位待确认'}`;
     content.append(title, meta);
     const severity = document.createElement('span');
     severity.className = 'annotation-severity';
@@ -2052,7 +2177,7 @@ function openAnnotationEditor(annotation: EngineeringAnnotation, pending = false
   activeAnnotationId = annotation.id;
   annotationForm.hidden = false;
   annotationFormIndex.textContent = String(annotation.sequence).padStart(2, '0');
-  annotationPartName.textContent = annotation.partLabel;
+  annotationPartName.textContent = annotationPartDescription(annotation);
   annotationTitle.value = pending ? '' : annotation.title;
   annotationDescription.value = annotation.description;
   annotationSeverity.value = annotation.severity;
@@ -2085,6 +2210,7 @@ function focusAnnotation(annotation: EngineeringAnnotation): void {
   const mesh = annotationMesh(annotation);
   const worldPoint = annotationWorldPoint(annotation);
   if (!mesh || !worldPoint) return;
+  pauseForPrecision();
   if (annotation.viewpoint) {
     homeFramingActive=false;
     const saved=annotation.viewpoint;
@@ -2092,12 +2218,18 @@ function focusAnnotation(annotation: EngineeringAnnotation): void {
     const resized=saved.viewport&&(Math.abs(saved.viewport[0]-viewportWidth)>2||Math.abs(saved.viewport[1]-viewportHeight)>2);
     if(resized){
       const direction=new THREE.Vector3(...saved.cameraPosition).sub(new THREE.Vector3(...saved.target)).normalize();
+      if(saved.anchorWorldPosition){
+        const distance=new THREE.Vector3(...saved.cameraPosition).distanceTo(new THREE.Vector3(...saved.target));
+        const extent=Math.max(distance*Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV())/2)*.8,.001);
+        fitBounds(new THREE.Box3().setFromCenterAndSize(worldPoint,new THREE.Vector3(extent,extent,extent)),direction,1.1,worldPoint,presentationFrame());invalidateStaticFrame();return;
+      }
       const owner=majorPartByLabel(annotation.partLabel),bounds=owner?partBounds(owner):new THREE.Box3().setFromObject(mesh);
       fitBounds(bounds,direction,1.2,worldPoint,presentationFrame());invalidateStaticFrame();return;
     }
     camera.position.fromArray(annotation.viewpoint.cameraPosition);
     camera.up.fromArray(annotation.viewpoint.cameraUp);
     controls.target.fromArray(annotation.viewpoint.target);
+    if(saved.anchorWorldPosition){const offset=worldPoint.clone().sub(new THREE.Vector3(...saved.anchorWorldPosition));camera.position.add(offset);controls.target.add(offset);}
     camera.near = saved.projection?.near??Math.max(modelSize.length() / 100000, .001);
     camera.far = saved.projection?.far??Math.max(modelSize.length() * 20, 100);
     camera.aspect=viewportWidth/Math.max(viewportHeight,1);
@@ -2183,25 +2315,30 @@ function placeAnnotationAtPointer(event: PointerEvent): void {
   restoreFullDetail();
   const intersection = spatialIntersectionAtPoint(event.clientX,event.clientY,true);
   if (!intersection) {
-    setAnnotationTip('请点击可见零件表面。', true);
+    setAnnotationTip(precisionSelection?'请点击当前选中零件的表面，或清除选择后标注其他零件。':'请点击可见零件表面。', true);
     return;
   }
-  const mesh = intersection.object as THREE.Mesh;
+  const surface=captureSurfacePoint(intersection);if(surface)createAnnotationAtSurface(surface);
+}
+
+function createAnnotationAtSurface(surface:SurfacePoint):void{
+  const mesh=surface.mesh;
+  if(!worldVisible(mesh))return;
   const meshPath = objectPathFromModelRoot(mesh);
-  const binding=anchorRegistry?.bind(mesh,intersection.instanceId);
+  const binding=anchorRegistry?.bind(mesh,surface.instanceId);
   if (!binding) {
     setAnnotationTip('此位置无法标注，请选择其他零件。', true);
     return;
   }
   if (pendingAnnotationId) deleteAnnotation(pendingAnnotationId);
-  const localPosition = intersection.point.clone().applyMatrix4(pointWorldMatrix(mesh,intersection.instanceId).invert());
-  const localNormal = intersection.face?.normal.clone().normalize() ?? new THREE.Vector3(0, 1, 0);
+  const localPosition=surface.localPosition,localNormal=surface.localNormal;
   const nextSequence = annotations.reduce((maximum, annotation) => Math.max(maximum, annotation.sequence), 0) + 1;
   const id = globalThis.crypto?.randomUUID?.() ?? `annotation-${Date.now()}-${nextSequence}`;
   const annotation: EngineeringAnnotation = {
     id,
     sequence: nextSequence,
     partLabel: annotationPartLabel(mesh),
+    componentLabel:precisionSelection?.label??surfaceComponentLabel(surface,spatialOwner.get(mesh)??null),
     meshPath,
     binding,
     localPosition: localPosition.toArray(),
@@ -2211,7 +2348,7 @@ function placeAnnotationAtPointer(event: PointerEvent): void {
     severity: '一般',
     status: '待处理',
     createdAt: new Date().toISOString(),
-    viewpoint: captureAnnotationViewpoint(),
+    viewpoint: {...captureAnnotationViewpoint(),anchorWorldPosition:surfaceWorldPoint(surface).toArray()},
   };
   annotations.push(annotation);
   annotationMeshLookup.set(id, mesh);
@@ -2742,11 +2879,11 @@ function renderPartList(query = ''): void {
       row.className = `part-row${selectedPart === part ? ' active' : ''}`;
       row.setAttribute('role', 'treeitem');row.setAttribute('aria-level','2');row.tabIndex=-1;row.dataset.treeKey=part.label;
       row.setAttribute('aria-selected', String(selectedPart === part));
-      if(part.scopeDescription)row.title=part.scopeDescription;
+      row.title=(part.scopeDescription?`${part.scopeDescription}；`:'')+'单击选中，双击聚焦';
       row.style.setProperty('--tree-order', String(renderedCount));
       row.innerHTML = `<span class="tree-node" aria-hidden="true">${partIcon(part.label)}</span><span><strong></strong></span><span class="visibility" aria-hidden="true">${selectedPart === part && partFocusActive ? '●' : ''}</span>`;
       row.querySelector('strong')!.textContent = part.label;
-      row.addEventListener('click', () => selectPart(part, true, true));
+      row.addEventListener('click', event => selectTreePart(part,event));
       children.append(row);
       renderedCount += 1;
     });
@@ -2766,6 +2903,7 @@ function renderPartList(query = ''): void {
 }
 
 function clearPartFocus(): void {
+  modelTaps.clear();lastTreeTap=null;clearPrecisionSelection();resumePrecisionMotion();
   restoreFullDetail();
   isIsolated=false;
   isolateButton.textContent='独显';
@@ -2784,6 +2922,7 @@ function clearVisibilityFilters():void{
 }
 
 function restoreVisibility(): void {
+  clearPrecisionSelection();resumePrecisionMotion();
   restoreFullDetail();setPresentationMode('overview');
   clearVisibilityFilters();
   selectedPart = null;
@@ -2796,20 +2935,22 @@ function restoreVisibility(): void {
 }
 
 function beginAnnotationPlacement(): void {
+  modelTaps.clear();cancelPrecisionFlight();pauseForPrecision();
   closeAnnotationEditor(true, true);
   setAnnotationPanelOpen(true);
   setAnnotationMode(true);
 }
 
-function setOrbitPivotFromPointer(event: MouseEvent): void {
-  if(partsPageOpen)return;
-  restoreFullDetail();
-  if (!modelRoot || annotationModeActive || pendingAnnotationId) return;
-  const part=selectedPart??pickPartAtPoint(event.clientX,event.clientY);
-  if(part)centerOrbitOnPart(part);
-}
-
 search.addEventListener('input', () => renderPartList(search.value));
+// Selecting a tree row inserts contextual details above it. Resolve the second
+// click at the panel boundary so that DOM reflow cannot turn it into another action.
+partsInspectorPanel.addEventListener('click',event=>{
+  const previous=lastTreeTap;if(!previous||event.detail===0)return;
+  if(performance.now()-previous.time<=500&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<=8){
+    lastTreeTap=null;event.preventDefault();event.stopImmediatePropagation();
+    selectPart(previous.part,false,true,false);flyToPrecisionBounds(partBounds(previous.part),partOrbitCenter(previous.part),previous.part.label==='叶片');
+  }
+},true);
 inspectorToggle.addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=false;setMobileInspectorOpen(!mobileInspectorOpen);});
 byId('inspector-close').addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=true;setMobileInspectorOpen(false);inspectorToggle.focus({preventScroll:true});});
 compactViewport.addEventListener('change',()=>setMobileInspectorOpen(mobileInspectorOpen));
@@ -2819,6 +2960,11 @@ annotationsTab.addEventListener('click', () => setAnnotationPanelOpen(true));
 sensorsTab.addEventListener('click', () => setInspectorTab('sensors'));
 wireWorkbenchKeyboard([partsTab,annotationsTab,sensorsTab],results);
 annotationToggle.addEventListener('click', beginAnnotationPlacement);
+byId('precision-resume').addEventListener('click',()=>{setAnnotationMode(false);resumePrecisionMotion();});
+byId('annotate-selected-point').addEventListener('click',()=>{
+  const pick=precisionSelection;if(!pick)return;
+  modelTaps.clear();cancelPrecisionFlight();pauseForPrecision();closeAnnotationEditor(true,true);setAnnotationPanelOpen(true);createAnnotationAtSurface(pick.surface);
+});
 annotationClose.addEventListener('click', () => setAnnotationPanelOpen(false));
 annotationModeButton.addEventListener('click', () => {
   if (annotationModeActive) setAnnotationMode(false);
@@ -2874,7 +3020,8 @@ annotationForm.addEventListener('submit', (event) => {
   annotation.description = annotationDescription.value.trim();
   annotation.severity = annotationSeverity.value as AnnotationSeverity;
   annotation.status = annotationStatus.value as AnnotationStatus;
-  annotation.viewpoint = captureAnnotationViewpoint();
+  const anchorPoint=annotationWorldPoint(annotation);
+  annotation.viewpoint = {...captureAnnotationViewpoint(),...(anchorPoint?{anchorWorldPosition:anchorPoint.toArray()}: {})};
   if (pendingAnnotationId === annotation.id) pendingAnnotationId = null;
   persistAnnotations();
   closeAnnotationEditor(false, false);
@@ -2882,18 +3029,24 @@ annotationForm.addEventListener('submit', (event) => {
 });
 
 const modelPointerIds=new Set<number>();
+document.addEventListener('pointerdown',event=>{
+  if(event.target!==canvas||event.button!==0)modelTaps.clear();
+  if(!partsInspectorPanel.contains(event.target as Node)||event.button!==0)lastTreeTap=null;
+},true);
+partsInspectorPanel.addEventListener('wheel',()=>{lastTreeTap=null;},{passive:true});
 canvas.addEventListener('pointerdown', (event) => {
   if(partsPageOpen)return;
   if (event.button !== 0) return;
+  lastTreeTap=null;
   modelPointerIds.add(event.pointerId);
-  if(modelPointerIds.size>1){partPointerDragged=true;return;}
+  if(modelPointerIds.size>1){partPointerDragged=true;modelTaps.clear();return;}
   partPointerDragged=false;
   annotationPointerStart = { x: event.clientX, y: event.clientY, button: event.button };
 });
 let partPointerDragged=false;
 canvas.addEventListener('pointermove',event=>{
   if(partsPageOpen)return;
-  if(annotationPointerStart&&Math.hypot(event.clientX-annotationPointerStart.x,event.clientY-annotationPointerStart.y)>5)partPointerDragged=true;
+  if(annotationPointerStart&&Math.hypot(event.clientX-annotationPointerStart.x,event.clientY-annotationPointerStart.y)>5){partPointerDragged=true;modelTaps.clear();}
 });
 canvas.addEventListener('pointerup', (event) => {
   if(partsPageOpen)return;
@@ -2902,12 +3055,14 @@ canvas.addEventListener('pointerup', (event) => {
   annotationPointerStart = null;
   if (!start || start.button !== 0 || event.button !== 0 || partPointerDragged) return;
   if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
-  if(annotationModeActive)placeAnnotationAtPointer(event);else selectPartAtPointer(event);
+  if(annotationModeActive)placeAnnotationAtPointer(event);else if(!pendingAnnotationId)selectPartAtPointer(event);
 });
 canvas.addEventListener('pointercancel',event=>{
   modelPointerIds.delete(event.pointerId);annotationPointerStart=null;partPointerDragged=true;
+  modelTaps.clear();
 });
-canvas.addEventListener('dblclick', setOrbitPivotFromPointer);
+canvas.addEventListener('dblclick',event=>{if(!partsPageOpen)event.preventDefault();});
+canvas.addEventListener('wheel',()=>modelTaps.clear(),{passive:true});
 
 function initializeSpatialRegistry():void{
   if(!modelRoot)return;
@@ -2938,7 +3093,8 @@ function spatialIntersectionAtPoint(clientX:number,clientY:number,annotation=fal
     const owner=spatialOwner.get(mesh);
     if(!annotation&&!owner)continue;
     if(annotation&&partFocusActive&&selectedPart&&owner!==selectedPart)continue;
-    const explicitShell=annotation&&partFocusActive&&selectedPart?.role==='shell'&&owner===selectedPart;
+    if(annotation&&precisionSelection&&!precisionPickContains(precisionSelection,mesh))continue;
+    const explicitShell=annotation&&((partFocusActive&&selectedPart?.role==='shell'&&owner===selectedPart)||!!precisionSelection);
     if(isPickThroughShell(mesh)&&!explicitShell)continue;
     (isPresentationShell(mesh)&&!explicitShell?shells:interiors).push(mesh);
   }
@@ -2948,6 +3104,7 @@ function spatialIntersectionAtPoint(clientX:number,clientY:number,annotation=fal
     return Array.isArray(mesh.material)?mesh.material[hit.face?.materialIndex??0]:mesh.material;
   };
   const usable=(hit:THREE.Intersection)=>{
+    if(annotation&&precisionSelection?.surface.instanceId!==undefined&&(hit.object!==precisionSelection.surface.mesh||hit.instanceId!==precisionSelection.surface.instanceId))return false;
     const material=hitMaterial(hit);
     return material?.visible&&material.opacity>0;
   };
@@ -2962,8 +3119,11 @@ function pickPartAtPoint(clientX:number,clientY:number):PartRecord|null{
 
 function selectPartAtPointer(event:PointerEvent):void{
   restoreFullDetail();
-  const part=pickPartAtPoint(event.clientX,event.clientY);
-  if(part&&part!==selectedPart){setInspectorTab('parts');selectPart(part,false,true);}
+  const hit=spatialIntersectionAtPoint(event.clientX,event.clientY),pick=hit?precisionPickFromHit(hit):null;
+  const action=modelTaps.tap(event.clientX,event.clientY,event.timeStamp,event.pointerType,pick);
+  if(action.double&&action.value){focusPrecisionPick(action.value);return;}
+  if(pick){setInspectorTab('parts',false);selectPrecisionPick(pick);}
+  else clearPartFocus();
 }
 window.addEventListener('resize', updateAnnotationOverlay);
 
@@ -3093,6 +3253,7 @@ const speedSlider=byId<HTMLInputElement>('rotor-speed-slider');
 speedSlider.addEventListener('input',()=>setRotorSpeed(Number(speedSlider.value)));
 function setRotorSpeed(rpm:number):void{
   const value=normalizeRotorSpeed(rpm);speedSlider.value=String(value);
+  if(value>0){inspectionResumeRpm=null;byId('precision-resume').hidden=true;}
   speedSlider.style.setProperty('--speed-position',`${value/20*100}%`);
   speedSlider.setAttribute('aria-valuetext',value===0?'停止':`${value.toFixed(1)} 转每分`);byId<HTMLOutputElement>('rotor-speed-value').value=value.toFixed(1);
   if(drivetrain){drivetrain.rpm=value;setMotionRunning(value>0);}
@@ -3194,6 +3355,7 @@ byId('disassembly-open').addEventListener('click',()=>{void openDisassembly();})
 window.addEventListener('popstate',()=>{if(new URL(location.href).searchParams.get('view')==='parts')void openDisassembly(false);else closeDisassembly(false);});
 
 function resetViewerView():void{
+  modelTaps.clear();cancelPrecisionFlight();resumePrecisionMotion();
   restoreFullDetail();
   setNavigationMode('orbit', false);
   setAnnotationPanelOpen(false,false);
@@ -3440,6 +3602,8 @@ renderer.setAnimationLoop(() => {
   if (motionActive && drivetrain) {
     drivetrain.advance(delta);
   }
+  updatePrecisionFlight(now);
+  updatePrecisionVisual();
   if (controls.enableDamping || controls.autoRotate) controls.update();
   if (!motionActive && !renderRequested) return;
   if(motionOptimizationEnabled&&renderQuality.observe(delta*1000,navigationRendering,motionActive,now)){
@@ -3452,7 +3616,7 @@ renderer.setAnimationLoop(() => {
   if (navigationRendering&&motionOptimizationEnabled&&displayMode==='xray') renderNavigationFrame();
   else if (displayMode === 'xray' && !isIsolated) renderMotionFrame();
   else renderer.render(scene, camera);
-  renderRequested = motionActive;
+  renderRequested = motionActive||!!precisionCameraFlight;
 
   frameSamples += 1;
   frameTime += delta;
@@ -3474,6 +3638,7 @@ window.addEventListener('beforeunload', () => {
   contextMaterialLod?.dispose();
   stopSensorStream?.();
   controls.dispose();
+  precisionHighlightGeometry.dispose();precisionHighlightMaterial.dispose();
   draco.dispose();
   modelRoot?.traverse((object) => {
     if (!(object as THREE.Mesh).isMesh) return;
