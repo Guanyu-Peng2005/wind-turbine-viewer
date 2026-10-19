@@ -18,7 +18,7 @@ import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
 import { normalizeRotorSpeed } from './rotor-speed';
-import { captureSurfacePoint, surfaceWorldPoint, precisionFocusPlan, SurfaceTapSequence, type SurfacePoint } from './precision-selection';
+import { captureSurfacePoint, surfaceWorldPoint, surfaceWorldBounds, precisionFocusPlan, SurfaceTapSequence, type SurfacePoint } from './precision-selection';
 import { partIcon, treeChevron, initializeWorkbenchIcons, wireWorkbenchKeyboard } from './workbench-ui';
 import { DisassemblyView, type DisassemblySource } from './disassembly-view';
 import { brakeDisplayVariants } from './brake-representation';
@@ -78,6 +78,7 @@ type EngineeringAnnotation = {
   sequence: number;
   partLabel: string;
   componentLabel?:string;
+  sensorId?:string;
   meshPath: number[];
   binding?:AnchorBinding;
   localPosition: [number, number, number];
@@ -115,6 +116,7 @@ type SensorDataValue = {
 };
 type SensorHistoryValue = { timestamp: number; value: number };
 type SensorRuntime = SensorDefinition & {
+  calibrationId?:string;
   part: PartRecord;
   mesh: THREE.Mesh;
   localPosition: [number, number, number];
@@ -358,6 +360,8 @@ let disassemblyLoading:Promise<void>|null=null;
 let partsPageOpen=false;
 let disassemblyOpenRevision=0;
 let disassemblyReturnView:{camera:THREE.PerspectiveCamera;target:THREE.Vector3;home:boolean;width:number;height:number}|null=null;
+let disassemblyToolsOpen=false;
+const sensorOriginalAnchors=new Map<string,{mesh:THREE.Mesh;binding:AnchorBinding;localPosition:[number,number,number];localNormal:[number,number,number];anchorDescription:string}>();
 let interactionLod: InteractionLod | null = null;
 let detailRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 let rotorSpinning = false;
@@ -408,6 +412,8 @@ const annotationTitle = byId<HTMLInputElement>('annotation-title');
 const annotationDescription = byId<HTMLTextAreaElement>('annotation-description');
 const annotationSeverity = byId<HTMLSelectElement>('annotation-severity');
 const annotationStatus = byId<HTMLSelectElement>('annotation-status');
+const annotationSensor=byId<HTMLSelectElement>('annotation-sensor');
+const annotationSendAlarm=byId<HTMLButtonElement>('annotation-send-alarm');
 const annotationDelete = byId<HTMLButtonElement>('annotation-delete');
 const annotationCancel = byId<HTMLButtonElement>('annotation-cancel');
 const annotationList = byId<HTMLElement>('annotation-list');
@@ -1510,6 +1516,7 @@ function presentationFrame():PresentationFrame{
 }
 
 function setMobileInspectorOpen(open:boolean):void{
+  if(partsPageOpen){setDisassemblyToolsOpen(open);return;}
   updateDesktopProportions();
   mobileInspectorOpen=open;
   inspector.dataset.mobileOpen=String(open);
@@ -1981,6 +1988,7 @@ function isStoredAnnotation(value: unknown): value is EngineeringAnnotation {
     && Number.isInteger(item.sequence)&&Number(item.sequence)>0
     && typeof item.partLabel === 'string'
     && (item.componentLabel===undefined||typeof item.componentLabel==='string')
+    && (item.sensorId===undefined||typeof item.sensorId==='string')
     && Array.isArray(item.meshPath)&&item.meshPath.every(i=>Number.isInteger(i)&&i>=0)
     && finiteVector(item.localPosition)&&finiteVector(item.localNormal)
     && (item.binding===undefined||validBinding(item.binding))
@@ -2048,18 +2056,24 @@ function setNavigationMode(mode: 'orbit' | 'pan', cancelAnnotation = true): void
 
 function setAnnotationMode(active: boolean): void {
   annotationModeActive = active;
+  if(partsPageOpen)disassemblyView?.setAnnotationMode(active);
   annotationModeButton.setAttribute('aria-pressed', String(active));
   annotationToggle.setAttribute('aria-pressed', String(active));
   canvas.classList.toggle('annotation-active', active);
   setAnnotationTip(
-    active ? (precisionSelection?'点击当前选中零件表面，放置精确标注。':'点击模型表面放置精确标注。') : '',
+    active ? (partsPageOpen?'点击展开零件的具体表面位置。':precisionSelection?'点击当前选中零件表面，放置精确标注。':'点击模型表面放置精确标注。') : '',
     active,
   );
+  byId('disassembly-tool-hint').hidden=!active;
+  byId('disassembly-tool-hint').textContent=active?'点击零件表面标定；拖动可旋转':'';
 }
 
 function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors',reveal=true): void {
-  if(reveal&&!compactViewport.matches&&desktopInspectorCollapsed){desktopInspectorCollapsed=false;setMobileInspectorOpen(mobileInspectorOpen);}
-  if(reveal&&compactViewport.matches&&!mobileInspectorOpen)setMobileInspectorOpen(true);
+  if(partsPageOpen){if(tab==='parts'){setDisassemblyToolsOpen(false);return;}if(reveal)setDisassemblyToolsOpen(true);}
+  else{
+    if(reveal&&!compactViewport.matches&&desktopInspectorCollapsed){desktopInspectorCollapsed=false;setMobileInspectorOpen(mobileInspectorOpen);}
+    if(reveal&&compactViewport.matches&&!mobileInspectorOpen)setMobileInspectorOpen(true);
+  }
   const showParts = tab === 'parts';
   const showAnnotations = tab === 'annotations';
   const showSensors = tab === 'sensors';
@@ -2085,6 +2099,7 @@ function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors',reveal=true): 
     sensorPanel.classList.remove('detail-open');
     scheduleSensorUiUpdate();
   }
+  if(partsPageOpen){syncDisassemblyToolButtons();disassemblyView?.refreshFrame();}
 }
 
 function setAnnotationPanelOpen(open: boolean,reveal=true): void {
@@ -2129,13 +2144,15 @@ function updateAnnotationOverlay(): void {
   if (!annotations.length) return;
   annotations.forEach((annotation) => {
     const marker = annotationMarkerElements.get(annotation.id);
-    const worldPoint = annotationWorldPoint(annotation);
+    const mesh=annotationMesh(annotation),worldPoint = annotationWorldPoint(annotation);
     if (!marker) return;
-    if(!worldPoint||!worldVisible(annotationMesh(annotation)!)){marker.hidden=true;return;}
-    const projected = worldPoint.project(camera);
-    const visible = projected.z > -1 && projected.z < 1;
+    // A linked alarm owns the pin while active; keep the annotation in the shared list.
+    if(sensorLayerVisible&&annotation.sensorId&&demoAlarm.active?.target.id===annotation.sensorId){marker.hidden=true;return;}
+    if(!mesh||!worldPoint||(!partsPageOpen&&!worldVisible(mesh))){marker.hidden=true;return;}
+    const projected = partsPageOpen?disassemblyView?.projectSource(mesh,annotation.binding?.instanceId,annotation.localPosition):worldPoint.project(camera);
+    const visible = !!projected&&projected.z > -1 && projected.z < 1&&Math.abs(projected.x)<1&&Math.abs(projected.y)<1;
     if(marker.hidden===visible)marker.hidden=!visible;
-    if (!visible) return;
+    if (!visible||!projected) return;
     const x = `${Math.round((overlayOffsetX+(projected.x*.5+.5)*viewportWidth)*10)/10}px`;
     const y = `${Math.round((overlayOffsetY+(-projected.y*.5+.5)*viewportHeight)*10)/10}px`;
     if(marker.style.left!==x)marker.style.left=x;
@@ -2145,16 +2162,17 @@ function updateAnnotationOverlay(): void {
 
 function renderAnnotationList(): void {
   annotationCount.textContent = String(annotations.length);
-  annotationListCount.textContent = `${annotations.length} 项`;
+  const listed=partsPageOpen?annotations.filter(annotation=>{const mesh=annotationMesh(annotation);return mesh&&disassemblyView?.containsSource(mesh,annotation.binding?.instanceId);}):annotations;
+  annotationListCount.textContent = `${listed.length} 项`;
   annotationList.replaceChildren();
-  if (!annotations.length) {
+  if (!listed.length) {
     const empty = document.createElement('p');
     empty.className = 'annotation-empty';
-    empty.textContent = '暂无标注';
+    empty.textContent = partsPageOpen?'当前层级暂无标定':'暂无标注';
     annotationList.append(empty);
     return;
   }
-  [...annotations].sort((left, right) => left.sequence - right.sequence).forEach((annotation) => {
+  [...listed].sort((left, right) => left.sequence - right.sequence).forEach((annotation) => {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = `annotation-row${annotation.id === activeAnnotationId ? ' active' : ''}`;
@@ -2188,6 +2206,10 @@ function openAnnotationEditor(annotation: EngineeringAnnotation, pending = false
   annotationDescription.value = annotation.description;
   annotationSeverity.value = annotation.severity;
   annotationStatus.value = annotation.status;
+  annotationSensor.replaceChildren(new Option('普通标注，不关联测点',''));
+  for(const sensor of sensors.filter(sensor=>sensor.partLabel===annotation.partLabel))annotationSensor.add(new Option(sensor.name,sensor.id));
+  annotationSensor.value=annotation.sensorId??'';
+  annotationSendAlarm.hidden=pending||!annotation.sensorId;
   annotationDelete.hidden = pending;
   setAnnotationTip(pending ? '填写标注后保存。' : '编辑标注', true);
   renderAnnotationList();
@@ -2216,6 +2238,7 @@ function focusAnnotation(annotation: EngineeringAnnotation): void {
   const mesh = annotationMesh(annotation);
   const worldPoint = annotationWorldPoint(annotation);
   if (!mesh || !worldPoint) return;
+  if(partsPageOpen){disassemblyView?.focusSource(mesh,annotation.binding?.instanceId);return;}
   pauseForPrecision();
   if (annotation.viewpoint) {
     homeFramingActive=false;
@@ -2247,28 +2270,18 @@ function focusAnnotation(annotation: EngineeringAnnotation): void {
     invalidateStaticFrame();
     return;
   }
-  const meshBounds = new THREE.Box3().setFromObject(mesh);
-  const size = meshBounds.getSize(new THREE.Vector3());
-  const minimumSize = Math.max(modelSize.length() * .008, .02);
-  if (size.length() < minimumSize) {
-    meshBounds.setFromCenterAndSize(worldPoint, new THREE.Vector3(minimumSize, minimumSize, minimumSize));
-  } else {
-    const offset = worldPoint.clone().sub(meshBounds.getCenter(new THREE.Vector3())).multiplyScalar(.55);
-    meshBounds.translate(offset);
-  }
-  const viewDirection = camera.position.clone().sub(controls.target).normalize();
-  fitBounds(meshBounds, viewDirection, 1.85);
-  invalidateStaticFrame();
+  const surface:SurfacePoint={mesh,instanceId:annotation.binding?.instanceId,geometry:interactionLod?.geometryFor(mesh,true)??mesh.geometry,localPosition:new THREE.Vector3(...annotation.localPosition),localNormal:new THREE.Vector3(...annotation.localNormal)};
+  flyToPrecisionBounds(surfaceWorldBounds(surface),worldPoint,annotation.partLabel==='叶片');return;
 }
 
 function selectAnnotation(id: string, focus = false, edit = false): void {
   if (pendingAnnotationId && pendingAnnotationId !== id) closeAnnotationEditor(true, true);
   const annotation = annotations.find((item) => item.id === id);
   if (!annotation) return;
-  if(focus&&annotationMesh(annotation)){
+  if(!partsPageOpen&&focus&&annotationMesh(annotation)){
     const owner=majorPartByLabel(annotation.partLabel);if(owner&&owner!==selectedPart)selectPart(owner,false,true);
   }
-  if(focus&&annotation.binding&&annotation.binding.rootId!=='source'&&annotationMesh(annotation)){
+  if(!partsPageOpen&&focus&&annotation.binding&&annotation.binding.rootId!=='source'&&annotationMesh(annotation)){
     setPresentationMode('drivetrain');applyDisplayMode(displayMode);updateSelectedUI();
   }
   setAnnotationPanelOpen(true);
@@ -2288,6 +2301,8 @@ function deleteAnnotation(id: string): void {
   const index = annotations.findIndex((annotation) => annotation.id === id);
   if (index < 0) return;
   annotations.splice(index, 1);
+  applySensorCalibrations();
+  renderSensorUi();
   annotationMeshLookup.delete(id);
   if (pendingAnnotationId === id) pendingAnnotationId = null;
   if (activeAnnotationId === id) activeAnnotationId = null;
@@ -2329,7 +2344,7 @@ function placeAnnotationAtPointer(event: PointerEvent): void {
 
 function createAnnotationAtSurface(surface:SurfacePoint):void{
   const mesh=surface.mesh;
-  if(!worldVisible(mesh))return;
+  if(partsPageOpen?!disassemblyView?.containsSource(mesh,surface.instanceId):!worldVisible(mesh))return;
   const meshPath = objectPathFromModelRoot(mesh);
   const binding=anchorRegistry?.bind(mesh,surface.instanceId);
   if (!binding) {
@@ -2344,7 +2359,7 @@ function createAnnotationAtSurface(surface:SurfacePoint):void{
     id,
     sequence: nextSequence,
     partLabel: annotationPartLabel(mesh),
-    componentLabel:precisionSelection?.label??surfaceComponentLabel(surface,spatialOwner.get(mesh)??null),
+    componentLabel:(!partsPageOpen?precisionSelection?.label:undefined)??surfaceComponentLabel(surface,spatialOwner.get(mesh)??majorPartForMesh(mesh)),
     meshPath,
     binding,
     localPosition: localPosition.toArray(),
@@ -2354,7 +2369,7 @@ function createAnnotationAtSurface(surface:SurfacePoint):void{
     severity: '一般',
     status: '待处理',
     createdAt: new Date().toISOString(),
-    viewpoint: {...captureAnnotationViewpoint(),anchorWorldPosition:surfaceWorldPoint(surface).toArray()},
+    viewpoint: partsPageOpen?undefined:{...captureAnnotationViewpoint(),anchorWorldPosition:surfaceWorldPoint(surface).toArray()},
   };
   annotations.push(annotation);
   annotationMeshLookup.set(id, mesh);
@@ -2362,6 +2377,7 @@ function createAnnotationAtSurface(surface:SurfacePoint):void{
   activeAnnotationId = id;
   setAnnotationMode(false);
   setAnnotationTip('填写标注后保存。', true);
+  setAnnotationPanelOpen(true);
   openAnnotationEditor(annotation, true);
 }
 
@@ -2412,6 +2428,7 @@ function sensorAnchorSeed(geometry:THREE.BufferGeometry, anchor: [number, number
 }
 
 function sensorWorldPoint(sensor: SensorRuntime): THREE.Vector3 {
+  if(sensor.calibrationId)return anchorWorldPoint(sensor.mesh,sensor.localPosition,sensor.binding);
   return stationaryAnchorWorldPoint(sensor.mesh,sensor.localPosition,sensorDisplayRestTransforms,sensor.binding);
 }
 
@@ -2612,7 +2629,7 @@ function renderSensorDetail(sensor: SensorRuntime): void {
   sensorPanel.classList.add('detail-open');
   sensorDetailId.textContent = `测点 ${String(sensors.indexOf(sensor)+1).padStart(2,'0')}`;
   sensorDetailName.textContent = sensor.name;
-  sensorDetailPart.textContent = `${sensor.partLabel} · ${sensor.anchorDescription}${worldVisible(sensor.mesh)?'':' · 开启传动透视查看'}`;
+  sensorDetailPart.textContent = `${sensor.partLabel} · ${sensor.anchorDescription}${partsPageOpen||worldVisible(sensor.mesh)?'':' · 开启传动透视查看'}`;
   sensorDetailValue.textContent = formatSensorValue(sensor);
   sensorDetailUnit.textContent = sensorUnitText(sensor.unit);
   sensorDetailStatus.textContent = sensorStatusText(sensor.status);
@@ -2632,11 +2649,14 @@ function updateSensorAlarmBadge(): void {
 function renderSensorUi(): void {
   ensureSensorRows();
   ensureSensorMarkers();
+  syncDisassemblySensorScope();
   const counts: Record<SensorStatus, number> = { normal: 0, warning: 0, alarm: 0, offline: 0 };
   sensors.forEach((sensor) => {
-    counts[sensor.status] += 1;
+    const inScope=!partsPageOpen||!!disassemblyView?.containsSource(sensor.mesh,sensor.binding.instanceId);
+    if(inScope)counts[sensor.status] += 1;
     const row = sensorRowElements.get(sensor.id);
     if (row) {
+      row.hidden=!inScope;
       row.classList.toggle('demo-alarm-target',demoAlarm.active?.target.id===sensor.id);
       row.dataset.status = sensor.status;
       row.classList.toggle('active', sensor.id === selectedSensorId);
@@ -2666,8 +2686,10 @@ function renderSensorUi(): void {
 
 function renderDemoAlarm():void{
   const signal=demoAlarm.active;
+  const changed=alarmBanner.hidden===!!signal;
   alarmBanner.hidden=!signal;byId('alarm-edge').hidden=!signal;
   byId('app').classList.toggle('demo-alarm-active',Boolean(signal));
+  if(partsPageOpen&&changed)requestAnimationFrame(()=>disassemblyView?.refreshFrame());
   if(!signal)return;
   const title=`${signal.target.name}超限`;
   if(byId('alarm-title').textContent!==title)byId('alarm-title').textContent=title;
@@ -2690,6 +2712,11 @@ function triggerDemoAlarm(sensorId=alarmSource.value):boolean{
   // Start audio in the trusted click handler before any camera or geometry work.
   void alarmSound.start();
   emitDemoSamples();setSensorLayerVisible(true);renderSensorUi();
+  if(partsPageOpen){
+    selectedSensorId=sensor.id;setInspectorTab('sensors');disassemblyView?.focusSource(sensor.mesh,sensor.binding.instanceId);renderSensorUi();
+    if(compactViewport.matches)setDisassemblyToolsOpen(false,true);
+    byId('alarm-announcement').textContent=`演示告警：${sensor.name}超限。可消音或解除告警。`;return true;
+  }
   if(sensor.binding.rootId!=='source'){setPresentationMode('drivetrain');applyDisplayMode(displayMode);}
   selectPart(sensor.part,false,true);selectedSensorId=sensor.id;
   setInspectorTab('sensors');renderSensorUi();
@@ -2704,26 +2731,26 @@ function clearDemoAlarm():void{
   demoAlarm.clear();alarmSound.stop();emitDemoSamples?.();
   setSensorLayerVisible(alarmPreviousLayer);renderSensorUi();
   byId('alarm-announcement').textContent='演示告警已解除，测点恢复正常。';
-  if(camera.view?.enabled)applyPresentationOffset(presentationFrame());invalidateStaticFrame();
+  if(!partsPageOpen&&camera.view?.enabled)applyPresentationOffset(presentationFrame());invalidateStaticFrame();
 }
 
 function updateSensorOverlay(): void {
   sensors.forEach((sensor) => {
     const marker = sensorMarkerElements.get(sensor.id);
     if (!marker) return;
-    if (!sensorLayerVisible || !worldVisible(sensor.mesh) || (sensor.status !== 'alarm' && sensor.id !== selectedSensorId)) {
+    if (!sensorLayerVisible || (!partsPageOpen&&!worldVisible(sensor.mesh)) || (!partsPageOpen&&sensor.status !== 'alarm' && sensor.id !== selectedSensorId)) {
       if(!marker.hidden)marker.hidden=true;
       return;
     }
-    const projected = sensorWorldPoint(sensor).project(camera);
+    const projected = partsPageOpen?disassemblyView?.projectSource(sensor.mesh,sensor.binding.instanceId,sensor.localPosition):sensorWorldPoint(sensor).project(camera);
     // High-performance HMI rule: keep normal and warning telemetry out of the
     // default 3D scene. A non-alarm point appears only when the operator
     // explicitly selects it from the monitoring list.
     const visible = sensorLayerVisible
-      && (sensor.status === 'alarm' || sensor.id === selectedSensorId)
-      && projected.z > -1 && projected.z < 1;
+      && (partsPageOpen||sensor.status === 'alarm' || sensor.id === selectedSensorId)
+      && !!projected&&projected.z > -1 && projected.z < 1&&Math.abs(projected.x)<1&&Math.abs(projected.y)<1;
     if(marker.hidden===visible)marker.hidden=!visible;
-    if (!visible) return;
+    if (!visible||!projected) return;
     const left = `${Math.round((overlayOffsetX+(projected.x*.5+.5)*viewportWidth)*10)/10}px`;
     const top = `${Math.round((overlayOffsetY+(-projected.y*.5+.5)*viewportHeight)*10)/10}px`;
     if(demoAlarm.active?.target.id===sensor.id){
@@ -2746,7 +2773,9 @@ function selectSensor(id: string, focus = false): void {
   selectedSensorId = id;
   setDemoAlarmTarget(id);
   setInspectorTab('sensors');
-  if (focus) selectPart(sensor.part, true, true);
+  if(focus&&partsPageOpen)disassemblyView?.focusSource(sensor.mesh,sensor.binding.instanceId);
+  else if (focus) selectPart(sensor.part, true, true);
+  if(partsPageOpen)setSensorLayerVisible(true);
   renderSensorUi();
 }
 
@@ -2767,7 +2796,7 @@ function setSensorLayerVisible(visible: boolean): void {
   sensorLayerToggle.classList.toggle('active', visible);
   sensorLayerToggle.setAttribute('aria-pressed', String(visible));
   updatePointAlarmConsole();
-  if(modelRoot&&camera.view?.enabled)applyPresentationOffset(presentationFrame());
+  if(!partsPageOpen&&modelRoot&&camera.view?.enabled)applyPresentationOffset(presentationFrame());
   invalidateStaticFrame();
   updateSensorAlarmBadge();
   updateSensorOverlay();
@@ -2783,6 +2812,7 @@ function createAnnotationFromSensor(): void {
     id,
     sequence: nextSequence,
     partLabel: sensor.partLabel,
+    sensorId:sensor.id,
     meshPath: objectPathFromModelRoot(sensor.mesh),
     binding:sensor.binding,
     localPosition: [...sensor.localPosition],
@@ -2792,7 +2822,7 @@ function createAnnotationFromSensor(): void {
     severity: sensor.status === 'alarm' ? '紧急' : '注意',
     status: '待处理',
     createdAt: new Date().toISOString(),
-    viewpoint: captureAnnotationViewpoint(),
+    viewpoint: partsPageOpen?undefined:captureAnnotationViewpoint(),
   };
   annotations.push(annotation);
   annotationMeshLookup.set(id, sensor.mesh);
@@ -2840,6 +2870,9 @@ async function initializeSensors(): Promise<void> {
     };
   }));
   sensors.push(...prepared.filter((sensor):sensor is SensorRuntime=>sensor!==null));
+  sensorOriginalAnchors.clear();
+  for(const sensor of sensors)sensorOriginalAnchors.set(sensor.id,{mesh:sensor.mesh,binding:sensor.binding,localPosition:[...sensor.localPosition],localNormal:[...sensor.localNormal],anchorDescription:sensor.anchorDescription});
+  applySensorCalibrations();
   for(const select of[alarmSource,pointAlarmSource]){
     select.replaceChildren();
     for(const sensor of sensors){const option=document.createElement('option');option.value=sensor.id;option.textContent=sensor.name;select.append(option);}
@@ -2941,10 +2974,11 @@ function restoreVisibility(): void {
 }
 
 function beginAnnotationPlacement(): void {
-  modelTaps.clear();cancelPrecisionFlight();pauseForPrecision();
+  modelTaps.clear();cancelPrecisionFlight();if(!partsPageOpen)pauseForPrecision();
   closeAnnotationEditor(true, true);
   setAnnotationPanelOpen(true);
   setAnnotationMode(true);
+  if(partsPageOpen&&compactViewport.matches)setDisassemblyToolsOpen(false,true);
 }
 
 search.addEventListener('input', () => renderPartList(search.value));
@@ -2958,8 +2992,8 @@ partsInspectorPanel.addEventListener('click',event=>{
   }
 },true);
 inspectorToggle.addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=false;setMobileInspectorOpen(!mobileInspectorOpen);});
-byId('inspector-close').addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=true;setMobileInspectorOpen(false);inspectorToggle.focus({preventScroll:true});});
-compactViewport.addEventListener('change',()=>setMobileInspectorOpen(mobileInspectorOpen));
+byId('inspector-close').addEventListener('click',()=>{if(partsPageOpen){setDisassemblyToolsOpen(false);return;}if(!compactViewport.matches)desktopInspectorCollapsed=true;setMobileInspectorOpen(false);inspectorToggle.focus({preventScroll:true});});
+compactViewport.addEventListener('change',()=>{if(partsPageOpen)setDisassemblyToolsOpen(disassemblyToolsOpen,annotationModeActive);else setMobileInspectorOpen(mobileInspectorOpen);});
 setMobileInspectorOpen(false);
 partsTab.addEventListener('click', () => setAnnotationPanelOpen(false));
 annotationsTab.addEventListener('click', () => setAnnotationPanelOpen(true));
@@ -3004,6 +3038,7 @@ sensorDetailClose.addEventListener('click', () => {
 });
 sensorCreateAnnotation.addEventListener('click', createAnnotationFromSensor);
 annotationCancel.addEventListener('click', () => closeAnnotationEditor(true));
+annotationSendAlarm.addEventListener('click',()=>{const annotation=annotations.find(item=>item.id===activeAnnotationId);if(annotation?.sensorId)triggerDemoAlarm(annotation.sensorId);});
 annotationDelete.addEventListener('click', () => {
   if (!activeAnnotationId) return;
   const annotation = annotations.find((item) => item.id === activeAnnotationId);
@@ -3026,9 +3061,12 @@ annotationForm.addEventListener('submit', (event) => {
   annotation.description = annotationDescription.value.trim();
   annotation.severity = annotationSeverity.value as AnnotationSeverity;
   annotation.status = annotationStatus.value as AnnotationStatus;
+  annotation.sensorId=annotationSensor.value||undefined;
+  if(annotation.sensorId)for(const other of annotations)if(other!==annotation&&other.sensorId===annotation.sensorId)delete other.sensorId;
   const anchorPoint=annotationWorldPoint(annotation);
-  annotation.viewpoint = {...captureAnnotationViewpoint(),...(anchorPoint?{anchorWorldPosition:anchorPoint.toArray()}: {})};
+  annotation.viewpoint = partsPageOpen?undefined:{...captureAnnotationViewpoint(),...(anchorPoint?{anchorWorldPosition:anchorPoint.toArray()}: {})};
   if (pendingAnnotationId === annotation.id) pendingAnnotationId = null;
+  applySensorCalibrations();renderSensorUi();
   persistAnnotations();
   closeAnnotationEditor(false, false);
   setAnnotationTip('标注已保存。', true);
@@ -3134,10 +3172,15 @@ function selectPartAtPointer(event:PointerEvent):void{
 window.addEventListener('resize', updateAnnotationOverlay);
 
 document.addEventListener('keydown', (event) => {
-  if(partsPageOpen){if(event.key==='Escape'){event.preventDefault();if(!disassemblyView?.clearSelection())closeDisassembly();}return;}
   const editing = document.activeElement instanceof HTMLInputElement
     || document.activeElement instanceof HTMLTextAreaElement
     || document.activeElement instanceof HTMLSelectElement;
+  if(partsPageOpen){
+    if(event.key==='Escape'){event.preventDefault();if(annotationModeActive||!annotationForm.hidden){setAnnotationMode(false);closeAnnotationEditor(true);}else if(disassemblyToolsOpen)setDisassemblyToolsOpen(false);else if(!disassemblyView?.clearSelection())closeDisassembly();}
+    else if(!editing&&event.key.toLowerCase()==='a'){event.preventDefault();beginAnnotationPlacement();}
+    else if(!editing&&event.key.toLowerCase()==='m'){event.preventDefault();openDisassemblySensors();}
+    return;
+  }
   if (event.key.toLowerCase() === 'a' && !editing) {
     event.preventDefault();
     beginAnnotationPlacement();
@@ -3320,6 +3363,59 @@ function collectDisassemblySources():DisassemblySource[]{
   return sources.sort((a,b)=>order.indexOf(a.system)-order.indexOf(b.system));
 }
 
+function applySensorCalibrations():void{
+  for(const sensor of sensors){
+    const original=sensorOriginalAnchors.get(sensor.id);if(original)Object.assign(sensor,original);
+    delete sensor.calibrationId;
+    const records=annotations.filter(annotation=>annotation.id!==pendingAnnotationId&&annotation.sensorId===sensor.id&&annotation.partLabel===sensor.partLabel).sort((a,b)=>b.sequence-a.sequence);
+    for(const annotation of records){const mesh=annotationMesh(annotation);if(!mesh||!annotation.binding)continue;
+      sensor.mesh=mesh;sensor.binding=annotation.binding;sensor.localPosition=[...annotation.localPosition];sensor.localNormal=[...annotation.localNormal];sensor.calibrationId=annotation.id;sensor.anchorDescription=`已标定 · ${annotation.componentLabel??annotation.partLabel}`;break;
+    }
+  }
+}
+
+function syncDisassemblyToolButtons():void{
+  byId('disassembly-annotations').setAttribute('aria-expanded',String(disassemblyToolsOpen&&!annotationPanel.hidden));
+  byId('disassembly-sensors').setAttribute('aria-expanded',String(disassemblyToolsOpen&&!sensorPanel.hidden));
+}
+
+function setDisassemblyToolsOpen(open:boolean,preservePlacement=false):void{
+  disassemblyToolsOpen=open;byId('app').classList.toggle('disassembly-tools-open',open);
+  inspector.inert=!open;if(open)inspector.removeAttribute('aria-hidden');else inspector.setAttribute('aria-hidden','true');
+  if(!open&&!preservePlacement){setAnnotationMode(false);closeAnnotationEditor(true,true);}
+  byId('disassembly-list').hidden=true;
+  syncDisassemblyToolButtons();
+  requestAnimationFrame(()=>{disassemblyView?.refreshFrame();updateAnnotationOverlay();updateSensorOverlay();});
+}
+
+function syncDisassemblySensorScope():void{
+  const available=partsPageOpen?sensors.filter(sensor=>disassemblyView?.containsSource(sensor.mesh,sensor.binding.instanceId)):sensors;
+  const key=available.map(sensor=>sensor.id).join('|');
+  if(alarmSource.dataset.scope!==key){
+    const previous=alarmSource.value;alarmSource.dataset.scope=key;alarmSource.replaceChildren();
+    for(const sensor of available)alarmSource.add(new Option(sensor.name,sensor.id));
+    if(available.some(sensor=>sensor.id===previous))alarmSource.value=previous;
+    if(!available.length)alarmSource.add(new Option('当前零件暂无监测点',''));
+  }
+  alarmSource.disabled=alarmSend.disabled=available.length===0;
+  let empty=byId<HTMLElement>('sensor-scope-empty');
+  if(!empty){empty=document.createElement('p');empty.id='sensor-scope-empty';empty.className='annotation-empty';sensorList.append(empty);}
+  empty.hidden=!partsPageOpen||available.length>0;empty.textContent='当前零件暂无监测点，可返回上一级查看。';
+  if(partsPageOpen&&selectedSensorId&&!available.some(sensor=>sensor.id===selectedSensorId)){selectedSensorId=null;sensorDetail.hidden=true;sensorPanel.classList.remove('detail-open');}
+}
+
+function syncDisassemblyScope():void{
+  if(!partsPageOpen)return;
+  renderAnnotationList();renderSensorUi();updateAnnotationOverlay();
+}
+
+function openDisassemblySensors():void{
+  setInspectorTab('sensors');setSensorLayerVisible(true);renderSensorUi();
+}
+
+byId('disassembly-annotations').addEventListener('click',()=>{if(disassemblyToolsOpen&&!annotationPanel.hidden)setDisassemblyToolsOpen(false);else{setInspectorTab('annotations');renderAnnotationList();}});
+byId('disassembly-sensors').addEventListener('click',()=>{if(disassemblyToolsOpen&&!sensorPanel.hidden)setDisassemblyToolsOpen(false);else openDisassemblySensors();});
+
 function prepareDisassemblySources():{sources:DisassemblySource[];materials:Map<THREE.Mesh,THREE.Material|THREE.Material[]>}{
   // Capture normal finishes and all main assemblies, independent of current selection,
   // relationship fading, isolation or transmission cutaway. Restore the main view immediately.
@@ -3342,8 +3438,8 @@ async function openDisassembly(updateUrl=true,system=''):Promise<void>{
   disassemblyReturnView=system?{camera:camera.clone(),target:controls.target.clone(),home:homeFramingActive,width:viewportWidth,height:viewportHeight}:null;
   if(!system){setPresentationMode('overview');resetViewerView();applyDisplayMode('xray');}
   setAnnotationMode(false);partsPageOpen=true;controls.enabled=false;annotationPointerStart=null;modelPointerIds.clear();
-  if(demoAlarm.active){demoAlarm.muted=true;alarmSound.stop(true);}
   byId('app').classList.add('disassembly-mode');byId('disassembly-page').hidden=false;byId('disassembly-busy').hidden=false;byId('disassembly-error').hidden=true;
+  disassemblyToolsOpen=false;byId('app').classList.remove('disassembly-tools-open');inspector.inert=true;syncDisassemblyToolButtons();
   canvas.setAttribute('aria-label','零件爆炸分解查看器');
   byId('disassembly-page').querySelectorAll<HTMLButtonElement|HTMLSelectElement|HTMLInputElement>('button:not(#disassembly-close),select,input').forEach(control=>{control.disabled=true;});
   byId('disassembly-busy').textContent=system?`正在展开${system}…`:'正在准备全部零件…';
@@ -3354,6 +3450,8 @@ async function openDisassembly(updateUrl=true,system=''):Promise<void>{
       disassemblyView=new DisassemblyView({renderer,canvas,page:byId('disassembly-page'),environment:scene.environment,axis:new THREE.Vector3(...(drivetrain?.anchors.lowAxis??[1,0,0]) as [number,number,number]),span:drivetrain?.bounds.getSize(new THREE.Vector3()).length()??10,majorSystems:majorPartGroups.flatMap(group=>group.parts.filter(part=>part.label!=='机舱外壳').map(part=>part.label)),camera:()=>camera,target:()=>controls.target.clone(),close:()=>closeDisassembly(),
         geometry:(mesh,detailed)=>interactionLod?.geometryFor(mesh,detailed)??mesh.geometry,
         interactionReady:()=>interactionLod?.ready??false,
+        surfacePicked:surface=>createAnnotationAtSurface(surface),scopeChanged:syncDisassemblyScope,
+        obstacles:()=>[...(disassemblyToolsOpen?[inspector]:[]),...(!alarmBanner.hidden?[alarmBanner]:[])],
         systemChanged:system=>{const url=new URL(location.href);if(url.searchParams.get('view')!=='parts')return;if(system)url.searchParams.set('assembly',system);else url.searchParams.delete('assembly');history.replaceState(null,'',url);},
         material:mesh=>snapshot.materials.get(mesh)??mesh.material});
       disassemblyLoading=disassemblyView.initialize(snapshot.sources).finally(()=>snapshot.materials.clear());
@@ -3372,8 +3470,10 @@ async function openDisassembly(updateUrl=true,system=''):Promise<void>{
 
 function closeDisassembly(updateUrl=true):void{
   if(!partsPageOpen)return;
+  setAnnotationMode(false);closeAnnotationEditor(true,true);
   disassemblyOpenRevision++;
   partsPageOpen=false;disassemblyView?.close();byId('disassembly-page').hidden=true;byId('app').classList.remove('disassembly-mode');controls.enabled=true;
+  disassemblyToolsOpen=false;byId('app').classList.remove('disassembly-tools-open');setInspectorTab('parts',false);setMobileInspectorOpen(mobileInspectorOpen);renderAnnotationList();renderSensorUi();
   canvas.setAttribute('aria-label','风机三维模型查看器');
   if(updateUrl){const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('assembly');history.replaceState(null,'',url);}
   const restore=disassemblyReturnView;disassemblyReturnView=null;
@@ -3381,6 +3481,8 @@ function closeDisassembly(updateUrl=true):void{
   camera.aspect=viewportWidth/Math.max(1,viewportHeight);
   if(restore&&restore.width===viewportWidth&&restore.height===viewportHeight)camera.updateProjectionMatrix();
   else if(homeFramingActive)fitHomeView();else if(camera.view?.enabled)applyPresentationOffset(presentationFrame());else camera.updateProjectionMatrix();
+  const activeSensor=sensors.find(sensor=>sensor.id===demoAlarm.active?.target.id);
+  if(activeSensor){if(activeSensor.binding.rootId!=='source')setPresentationMode('drivetrain');selectPart(activeSensor.part,false,true,false);selectedSensorId=activeSensor.id;renderSensorUi();}
   previousFrameTime=performance.now();setRenderScale(restingRenderScale());invalidateStaticFrame();renderDemoAlarm();
   byId('disassembly-open').focus({preventScroll:true});
 }
@@ -3630,7 +3732,14 @@ renderer.setAnimationLoop(() => {
   const now = performance.now();
   const delta = Math.max((now - previousFrameTime) / 1000, 0);
   previousFrameTime = now;
-  if(partsPageOpen){if(!document.hidden)disassemblyView?.render(delta);return;}
+  if(partsPageOpen){
+    if(!document.hidden&&disassemblyView?.render(delta)){
+      const header=byId('disassembly-page').querySelector<HTMLElement>('.disassembly-header')!;
+      byId('app').style.setProperty('--drill-header-bottom',`${header.getBoundingClientRect().bottom}px`);
+      updateAnnotationOverlay();updateSensorOverlay();
+    }
+    return;
+  }
   resizeRenderer();
   const motionActive = rotorSpinning && !!drivetrain && drivetrain.rpm > 0 && !document.hidden;
   if (motionActive && drivetrain) {

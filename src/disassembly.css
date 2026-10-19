@@ -8,7 +8,7 @@
 .assembly-controls button:disabled { opacity:.4; cursor:wait; }
 .assembly-controls button:focus-visible,#disassembly-page :focus-visible { outline:2px solid #e6c571; outline-offset:3px; }
 #disassembly-error { display:block; max-width:230px; padding:8px; font-size:12px; color:#ffb39a; }
-#app.disassembly-mode > :not(#viewer):not(#disassembly-page) { display:none!important; }
+#app.disassembly-mode > :not(#viewer):not(#disassembly-page):not(#inspector):not(#annotation-overlay):not(#sensor-overlay):not(#alarm-edge):not(#alarm-banner):not(#alarm-announcement) { display:none!important; }
 #disassembly-page { position:absolute; inset:0; z-index:9; pointer-events:none; color:#e4edf4; font-family:inherit; }
 .disassembly-header { position:absolute; top:18px; left:20px; right:20px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; background:#0b1b27f7; border:1px solid #355060; border-radius:8px; pointer-events:auto; box-shadow:0 6px 24px #0003; }
 .disassembly-heading,.disassembly-filters { display:flex; align-items:center; gap:12px; min-width:0; }

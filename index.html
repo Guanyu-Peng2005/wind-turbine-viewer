@@ -157,6 +157,8 @@
               <span>工程说明</span>
               <textarea id="annotation-description" maxlength="240" rows="3" placeholder="记录缺陷、检修要求或测点说明"></textarea>
             </label>
+            <label><span>关联告警测点</span><select id="annotation-sensor" title="保存后，将所选测点的位置同步到此标定点。"><option value="">普通标注，不关联测点</option></select></label>
+            <button id="annotation-send-alarm" type="button" hidden>发送此测点告警</button>
             <div class="annotation-form-actions">
               <button id="annotation-delete" class="danger" type="button">删除</button>
               <span></span>
@@ -288,6 +290,7 @@
         <header class="disassembly-header">
           <div class="disassembly-heading"><button id="disassembly-close" type="button">退出分解</button><button id="disassembly-back" type="button" hidden>上一级</button><h1>主要总成分解</h1><span id="disassembly-count"></span><button id="disassembly-list-toggle" type="button" aria-controls="disassembly-list" aria-expanded="false">总成清单</button></div>
           <div class="disassembly-filters"><select id="disassembly-scope" aria-label="按系统查看零件"></select><input id="disassembly-search" type="search" placeholder="搜索零件或编号" aria-label="搜索分解零件" /><button id="disassembly-fit" type="button">复位视图</button></div>
+          <div class="disassembly-tools" role="group" aria-label="分解检修工具"><button id="disassembly-annotations" type="button" aria-expanded="false" aria-controls="inspector">标定</button><button id="disassembly-sensors" type="button" aria-expanded="false" aria-controls="inspector">报警点位</button><span id="disassembly-tool-hint" role="status" hidden></span></div>
         </header>
         <div id="disassembly-labels" aria-label="零件分组"></div>
         <aside id="disassembly-list" hidden aria-label="分解零件清单"><header><strong>零件清单</strong><button id="disassembly-list-close" type="button" aria-label="收起零件清单">收起</button></header><div id="disassembly-list-items"></div><footer><button id="disassembly-list-prev" type="button">上一页</button><span id="disassembly-list-page"></span><button id="disassembly-list-next" type="button">下一页</button></footer></aside>

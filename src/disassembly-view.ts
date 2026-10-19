@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { packRectangles, planPartLayout, smoothStep } from './disassembly-layout';
 import { initialDisassemblyScope } from './disassembly-entry';
+import { captureDisassemblySurface, disassembledAnchor } from './disassembly-anchors';
+import type { SurfacePoint } from './precision-selection';
 
 export type PartPiece={mesh:THREE.Mesh;instanceId?:number};
 export type DisassemblySource={id:string;label:string;system:string;cluster:string;internal?:boolean;pieces:PartPiece[]};
@@ -10,7 +12,7 @@ type Piece={source:PartPiece;matrix:THREE.Matrix4;full:THREE.BufferGeometry;low:
 type Entry={id:string;label:string;system:string;cluster:string;internal:boolean;pieces:Piece[];bounds:THREE.Box3;visible:boolean;number:number};
 type Unit={id:string;label:string;members:Entry[];bounds:THREE.Box3;center:THREE.Vector3;offset:THREE.Vector3;tile:THREE.Vector3;tileScale:number;position:THREE.Vector3;scale:number;fromPosition:THREE.Vector3;fromScale:number;transform:THREE.Matrix4};
 type Batch={mesh:THREE.InstancedMesh;members:{entry:Entry;piece:Piece}[];full:THREE.BufferGeometry;low:THREE.BufferGeometry;owner:Unit|null;visibleMembers:{index:number;piece:Piece;unit:Unit}[]};
-type Options={renderer:THREE.WebGLRenderer;environment:THREE.Texture|null;canvas:HTMLCanvasElement;page:HTMLElement;axis:THREE.Vector3;span:number;majorSystems:string[];camera:()=>THREE.PerspectiveCamera;target:()=>THREE.Vector3;material:(mesh:THREE.Mesh)=>Finish;geometry:(mesh:THREE.Mesh,detailed:boolean)=>THREE.BufferGeometry;interactionReady:()=>boolean;close:()=>void;systemChanged?:(system:string)=>void};
+type Options={renderer:THREE.WebGLRenderer;environment:THREE.Texture|null;canvas:HTMLCanvasElement;page:HTMLElement;axis:THREE.Vector3;span:number;majorSystems:string[];camera:()=>THREE.PerspectiveCamera;target:()=>THREE.Vector3;material:(mesh:THREE.Mesh)=>Finish;geometry:(mesh:THREE.Mesh,detailed:boolean)=>THREE.BufferGeometry;interactionReady:()=>boolean;close:()=>void;systemChanged?:(system:string)=>void;scopeChanged?:()=>void;surfacePicked?:(surface:SurfacePoint)=>void;obstacles?:()=>HTMLElement[]};
 
 /** 原始透视相机 + 总成 / 子总成 / 零件的逐级展示，源装配树保持只读。 */
 export class DisassemblyView{
@@ -23,6 +25,9 @@ export class DisassemblyView{
   private hubAnchor=new THREE.Vector3();
   private controls:OrbitControls;
   private entries:Entry[]=[];
+  private sourceLookup=new Map<THREE.Mesh,Map<number|undefined,{entry:Entry;piece:Piece}>>();
+  private owners=new Map<Entry,Unit>();
+  private annotationMode=false;
   private units:Unit[]=[];
   private batches:Batch[]=[];
   private activeBatches:Batch[]=[];
@@ -135,6 +140,7 @@ export class DisassemblyView{
       const group=groups.get(key)??{members:[],piece};group.members.push({entry,piece});groups.set(key,group);
     }));
     for(const {members,piece}of groups.values()){const mesh=new THREE.InstancedMesh(piece.low,piece.rootFinish,members.length);mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);mesh.frustumCulled=false;mesh.matrixAutoUpdate=false;this.scene.add(mesh);this.batches.push({mesh,members,full:piece.full,low:piece.low,owner:null,visibleMembers:[]});}
+    for(const entry of this.entries)for(const piece of entry.pieces){const map=this.sourceLookup.get(piece.source.mesh)??new Map();map.set(piece.source.instanceId,{entry,piece});this.sourceLookup.set(piece.source.mesh,map);}
     this.scope.replaceChildren(new Option('主要总成',''));
     for(const system of [...new Set(this.entries.map(e=>e.system))])this.scope.append(new Option(system,system));
     this.initialized=true;
@@ -165,7 +171,37 @@ export class DisassemblyView{
     // Resolve the destination before building or drawing: no whole-turbine explosion in between.
     this.enterSystem(system);
   }
-  close():void{this.active=false;this.animation=null;this.controls.enabled=false;this.pointer=null;this.options.page.hidden=true;}
+  close():void{this.active=false;this.annotationMode=false;this.animation=null;this.controls.enabled=false;this.pointer=null;this.options.page.hidden=true;}
+  currentSystem():string{return this.system;}
+  containsSource(mesh:THREE.Mesh,instanceId?:number):boolean{
+    const source=this.sourceLookup.get(mesh)?.get(instanceId);
+    return !!source&&source.entry.visible&&(!this.selected||this.selected.members.includes(source.entry));
+  }
+  projectSource(mesh:THREE.Mesh,instanceId:number|undefined,position:readonly number[]):THREE.Vector3|null{
+    const source=this.sourceLookup.get(mesh)?.get(instanceId);if(!source||!this.containsSource(mesh,instanceId))return null;
+    const unit=this.owners.get(source.entry);if(!unit)return null;
+    return disassembledAnchor(position,source.piece.matrix,unit.transform).project(this.camera);
+  }
+  setAnnotationMode(active:boolean):void{
+    this.annotationMode=active;
+    if(active&&this.animation){this.animation=null;this.applyProgress(this.progress);}
+    this.dirty=true;
+  }
+  refreshFrame():void{
+    if(!this.active)return;this.labelFrame=null;
+    // Tool panels and rotation of the device change the camera frame, not the part layout.
+    if(this.selected)this.fitBounds(this.currentBounds(this.selected));
+    else if(!this.system||this.system==='叶片')this.resetOverviewCamera();
+    else{const bounds=new THREE.Box3();for(const unit of this.units)bounds.union(this.currentBounds(unit));this.fitBounds(bounds);}
+    this.dirty=true;
+  }
+  focusSource(mesh:THREE.Mesh,instanceId?:number):boolean{
+    const source=this.sourceLookup.get(mesh)?.get(instanceId);if(!source)return false;
+    if(this.selected)this.clearSelection();
+    if(!source.entry.visible){this.enterSystem(source.entry.system);}
+    const unit=this.units.find(unit=>unit.members.includes(source.entry));if(!unit)return false;
+    this.animation=null;this.inspectUnit(unit);return true;
+  }
   private rootOffset(system:string):THREE.Vector3{
     const axis=this.options.axis.clone().normalize(),up=new THREE.Vector3(0,1,0),side=new THREE.Vector3().crossVectors(axis,up).normalize(),unit=this.options.span*.042;
     const vectors:Record<string,[number,number,number]>={'叶片':[-1.5,0,0],'轮毂总成':[-1,0,0],'主轴组件':[-.4,0,0],'主轴承':[0,.8,0],'齿轮箱':[0,1,0],'高速轴制动器':[0,0,1.2],'高速轴联轴器':[.3,0,1.4],'发电机':[1.4,.8,0],'主机架':[0,-1,0],'液压系统':[0,0,-1.1],'辅助变压器':[1.2,0,-1],'偏航系统':[0,-1.6,0],'机舱外壳':[0,2.2,0]};
@@ -209,6 +245,7 @@ export class DisassemblyView{
     });
     this.spaceUnits();if(!this.system)this.resetOverviewCamera();this.listPage=0;this.renderList();this.applyProgress(this.progress);
     this.options.page.querySelector<HTMLElement>('#disassembly-empty')!.hidden=this.units.length!==0;
+    this.options.scopeChanged?.();
   }
   private enterSystem(system:string):void{
     const scope=initialDisassemblyScope(this.entries,system);
@@ -247,7 +284,7 @@ export class DisassemblyView{
   }
   /** 层级或选择变化时建立绑定；整组移动只更新物体矩阵，不重复上传全部实例。 */
   private refreshBindings():void{
-    const owners=new Map<Entry,Unit>();this.units.forEach(unit=>unit.members.forEach(entry=>owners.set(entry,unit)));this.activeBatches=[];
+    const owners=this.owners;owners.clear();this.units.forEach(unit=>unit.members.forEach(entry=>owners.set(entry,unit)));this.activeBatches=[];
     for(const batch of this.batches){
       batch.visibleMembers=[];
       batch.members.forEach(({entry,piece},index)=>{const unit=owners.get(entry);if(entry.visible&&unit&&(!this.selected||this.selected===unit))batch.visibleMembers.push({index,piece,unit});});
@@ -377,6 +414,11 @@ export class DisassemblyView{
     if(bounds.isEmpty())return;
     const header=this.options.page.querySelector<HTMLElement>('.disassembly-header')!.getBoundingClientRect(),footer=this.options.page.querySelector<HTMLElement>('.disassembly-timeline')!.getBoundingClientRect(),rect=this.options.canvas.getBoundingClientRect();
     let top=header.bottom-rect.top+22,bottom=footer.top-rect.top-22,right=this.width-24;
+    for(const element of this.options.obstacles?.()??[]){const r=element.getBoundingClientRect();if(!r.width||!r.height)continue;
+      if(element.id==='alarm-banner')top=Math.max(top,r.bottom-rect.top+18);
+      else if(r.left-rect.left>this.width*.45)right=Math.min(right,r.left-rect.left-16);
+      else bottom=Math.min(bottom,r.top-rect.top-16);
+    }
     if(this.selected){const detail=this.options.page.querySelector<HTMLElement>('#disassembly-selection')!.getBoundingClientRect();if(detail.height)bottom=Math.min(bottom,detail.top-rect.top-14);}
     const list=this.options.page.querySelector<HTMLElement>('#disassembly-list')!,lr=list.getBoundingClientRect();
     if(!list.hidden){if(lr.left>this.width*.4)right=lr.left-rect.left-15;else bottom=Math.min(bottom,lr.top-rect.top-12);}
@@ -399,7 +441,17 @@ export class DisassemblyView{
     this.camera.updateMatrixWorld(true);const rect=this.options.canvas.getBoundingClientRect(),ray=new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((x-rect.left)/rect.width*2-1,-(y-rect.top)/rect.height*2+1),this.camera);
     const candidates=this.batches.filter(b=>b.mesh.visible&&((Array.isArray(b.mesh.material)?b.mesh.material[0]:b.mesh.material).opacity>=.18));
-    const hits=ray.intersectObjects(candidates.map(b=>b.mesh),false);
+    // Pick the original triangles even during the short interaction-LOD restore delay.
+    const geometries=candidates.map(batch=>batch.mesh.geometry);
+    candidates.forEach(batch=>{batch.mesh.geometry=batch.full;batch.mesh.boundingSphere=null;batch.mesh.updateMatrixWorld(true);});
+    let hits:THREE.Intersection[];
+    try{hits=ray.intersectObjects(candidates.map(b=>b.mesh),false);}finally{candidates.forEach((batch,i)=>{batch.mesh.geometry=geometries[i];batch.mesh.boundingSphere=null;});}
+    if(this.annotationMode){
+      const hit=hits.find(hit=>hit.instanceId!==undefined);if(!hit)return;
+      const batch=candidates.find(batch=>batch.mesh===hit.object)!,member=batch.members[hit.instanceId!],unit=this.owners.get(member.entry);if(!unit)return;
+      const surface=captureDisassemblySurface(hit,member.piece.source,member.piece.matrix,unit.transform,member.piece.full);
+      if(surface)this.options.surfacePicked?.(surface);return;
+    }
     for(const hit of hits){if(hit.instanceId===undefined)continue;const entry=candidates.find(b=>b.mesh===hit.object)!.members[hit.instanceId].entry;if(!entry.visible||(this.selected&&!this.selected.members.includes(entry)))continue;const unit=this.units.find(u=>u.members.includes(entry));if(unit){this.enterUnit(unit);return;}}
     this.clearSelection();
   }
@@ -421,7 +473,7 @@ export class DisassemblyView{
   private inspectUnit(unit:Unit):void{
     if(this.selected===unit)return;
     if(!this.inspectionRestore)this.inspectionRestore={camera:this.camera.clone(),target:this.controls.target.clone(),listHidden:Boolean(this.options.page.querySelector<HTMLElement>('#disassembly-list')!.hidden),width:this.width,height:this.height};
-    this.selected=unit;this.animation=null;this.bindingsDirty=true;this.applyProgress(this.progress);this.fitBounds(this.currentBounds(unit));this.setInspectionNavigation('rotate');
+    this.selected=unit;this.animation=null;this.bindingsDirty=true;this.applyProgress(this.progress);this.options.scopeChanged?.();this.fitBounds(this.currentBounds(unit));this.setInspectionNavigation('rotate');
   }
   clearSelection():boolean{
     if(!this.selected)return false;
@@ -429,6 +481,7 @@ export class DisassemblyView{
     const restore=this.inspectionRestore;
     if(restore){this.camera.copy(restore.camera);this.camera.aspect=this.width/Math.max(1,this.height);this.camera.updateProjectionMatrix();this.controls.target.copy(restore.target);this.controls.update();this.inspectionRestore=null;}
     this.applyProgress(this.progress);
+    this.options.scopeChanged?.();
     if(restore&&(restore.width!==this.width||restore.height!==this.height||restore.listHidden!==this.options.page.querySelector<HTMLElement>('#disassembly-list')!.hidden))this.fitCurrent();
     return true;
   }
@@ -487,22 +540,27 @@ export class DisassemblyView{
     this.options.page.querySelector<HTMLButtonElement>('#disassembly-list-prev')!.disabled=this.listPage===0;
     this.options.page.querySelector<HTMLButtonElement>('#disassembly-list-next')!.disabled=this.listPage>=count-1;
   }
-  render(delta:number):void{
-    if(!this.active)return;
+  render(delta:number):boolean{
+    if(!this.active)return false;
     this.refreshInteractionGeometry();
     const width=this.options.canvas.clientWidth,height=this.options.canvas.clientHeight;
-    if(width!==this.width||height!==this.height){this.width=width;this.height=height;this.options.renderer.setPixelRatio(Math.min(devicePixelRatio,1));this.options.renderer.setSize(width,height,false);this.buildUnits();this.fitCurrent();}
+    if(width!==this.width||height!==this.height){
+      this.width=width;this.height=height;this.options.renderer.setPixelRatio(Math.min(devicePixelRatio,1));this.options.renderer.setSize(width,height,false);
+      this.camera.aspect=width/Math.max(height,1);this.camera.updateProjectionMatrix();
+      if(this.mode==='flat'){const selectedId=this.selected?.id;this.buildUnits();this.selected=this.units.find(unit=>unit.id===selectedId)??null;this.bindingsDirty=true;this.applyProgress(this.progress);}
+      this.refreshFrame();
+    }
     if(this.animation){
       const a=this.animation;a.elapsed+=Math.min(delta,.1);const t=Math.min(1,a.elapsed/a.duration);
       this.applyProgress(THREE.MathUtils.lerp(a.from,a.to,smoothStep(t)),a.blend?smoothStep(t):undefined);
       if(t===1){this.animation=null;this.detailAt=performance.now()+180;this.controls.enabled=true;this.updateUi();}
     }
     if(this.detailAt&&performance.now()>=this.detailAt){this.detailAt=0;this.dirty=true;}
-    if(!this.dirty)return;
+    if(!this.dirty)return false;
     const full=!this.animation&&!this.dragging&&!this.detailAt;
     for(const batch of this.activeBatches){const geometry=full?batch.full:batch.low;if(batch.mesh.geometry!==geometry){batch.mesh.geometry=geometry;batch.mesh.boundingSphere=null;batch.mesh.boundingBox=null;}}
     this.camera.updateMatrixWorld(true);this.updateLabels();this.options.renderer.setRenderTarget(null);this.options.renderer.autoClear=true;this.options.renderer.render(this.scene,this.camera);
-    this.lastDrawCalls=this.options.renderer.info.render.calls;this.lastTriangles=this.options.renderer.info.render.triangles;this.dirty=false;
+    this.lastDrawCalls=this.options.renderer.info.render.calls;this.lastTriangles=this.options.renderer.info.render.triangles;this.dirty=false;return true;
   }
   diagnostics(){return {active:this.active,total:this.entries.length,visible:this.entries.filter(e=>e.visible).length,level:this.system?this.cluster!==null?'零件':'部件':'主要总成',system:this.system,cluster:this.cluster,mode:this.mode,unitCount:this.units.length,progress:this.progress,animating:!!this.animation,batches:this.batches.length,drawCalls:this.lastDrawCalls,triangles:this.lastTriangles,sourceGeometryClones:0,selected:this.selected?.id??null,inspectionNavigation:this.inspectionNavigation,guidesVisible:false,opaqueDetail:!!this.system&&this.batches.filter(b=>b.mesh.visible).every(b=>(Array.isArray(b.mesh.material)?b.mesh.material:[b.mesh.material]).every(m=>!m.transparent&&m.opacity===1)),cameraWorld:this.camera.matrixWorld.toArray(),cameraProjection:this.camera.projectionMatrix.toArray(),units:this.units.map(u=>({id:u.id,label:u.label,semantic:this.semanticText(u),members:u.members.length,canExpand:this.canExpand(u),center:u.center.toArray(),position:u.position.toArray(),size:u.bounds.getSize(new THREE.Vector3()).multiplyScalar(u.scale).toArray()}))};}
   dispose():void{this.close();this.abort.abort();this.controls.dispose();this.batches.forEach(b=>b.mesh.dispose());this.materials.forEach(m=>m.dispose());this.box.geometry.dispose();(this.box.material as THREE.Material).dispose();this.scene.clear();}

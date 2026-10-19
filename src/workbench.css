@@ -13,6 +13,38 @@
   font-family:"PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
   color-scheme:dark;
 }
+
+/* The drill-down view shares the same annotations, calibrated points and alarm UI. */
+#app.disassembly-mode > #inspector { display:none!important; }
+#app.disassembly-mode.disassembly-tools-open > #inspector { display:flex!important; z-index:22; top:calc(var(--drill-header-bottom,64px) + 12px); bottom:150px; right:12px; left:auto; width:300px; padding:12px; border:1px solid var(--ui-line); border-radius:7px; }
+#app.disassembly-mode #parts-tab { display:none; }
+#app.disassembly-mode .inspector-tabs { grid-template-columns:1fr 1fr; }
+#app.disassembly-mode > :is(#annotation-overlay,#sensor-overlay) { z-index:11; }
+#app.disassembly-mode > #alarm-edge { z-index:12; }
+#app.disassembly-mode > #alarm-banner { z-index:21; top:calc(var(--drill-header-bottom,64px) + 12px); left:12px; right:12px; }
+#app.disassembly-mode.disassembly-tools-open > #alarm-banner { right:328px; }
+.workbench .disassembly-tools { display:flex; align-items:center; gap:6px; }
+.workbench #disassembly-page .disassembly-tools button { border:1px solid #ffffff16; color:#d8e5ef; background:#263a47; }
+.workbench #disassembly-page .disassembly-tools button[aria-expanded="true"] { color:#edcf90; background:#3d372b; border-color:#9b8253; }
+#disassembly-tool-hint { color:#dfc48c; font-size:11px; }
+.workbench #annotation-send-alarm { width:100%; min-height:36px; color:#ffd2bd; background:#61352f; border:1px solid #936052; border-radius:4px; }
+@media(max-width:900px),(pointer:coarse) and (max-width:1400px) {
+  .workbench .disassembly-tools { width:100%; }
+  .workbench #disassembly-page .disassembly-tools button { flex:1; min-height:36px; }
+  #app.disassembly-mode.disassembly-tools-open > #inspector { top:auto; bottom:12px; left:12px; right:12px; width:auto; height:min(36dvh,340px); max-height:calc(100dvh - var(--drill-header-bottom,150px) - 24px); }
+  #app.disassembly-mode.disassembly-tools-open > #inspector:has(#annotation-form:not([hidden])) { height:min(44dvh,380px); }
+  #app.disassembly-mode.disassembly-tools-open > #alarm-banner { right:12px; }
+  #disassembly-tool-hint { max-width:140px; }
+}
+@media(max-height:600px) and (min-width:600px) {
+  .workbench .disassembly-tools { width:auto; flex-shrink:0; }
+  #app.disassembly-mode.disassembly-tools-open > #inspector { top:calc(var(--drill-header-bottom,64px) + 8px); bottom:8px; left:auto; right:8px; width:270px; height:auto; }
+  #app.disassembly-mode.disassembly-tools-open > #alarm-banner { right:290px; }
+  #app.disassembly-mode.demo-alarm-active #disassembly-selection { bottom:8px; left:12px; right:auto; width:auto; max-width:45%; transform:none; padding:5px; }
+  #app.disassembly-mode.demo-alarm-active #disassembly-selection > div:first-child { display:none; }
+  #app.disassembly-mode.demo-alarm-active .disassembly-timeline { left:auto; right:12px; bottom:8px; width:min(390px,50vw); transform:none; }
+  #app.disassembly-mode.demo-alarm-active .disassembly-progress { display:none; }
+}
 #app.workbench { background:#020c13; color:var(--ui-ink); font-size:14px; }
 #app.workbench::before { display:none; }
 .workbench :is(button,input,select,textarea) { font-family:inherit; }
