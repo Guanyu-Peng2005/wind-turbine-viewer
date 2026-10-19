@@ -18,7 +18,7 @@ import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
 import { normalizeRotorSpeed } from './rotor-speed';
-import { captureSurfacePoint, surfaceWorldPoint, surfaceWorldBounds, precisionFocusPlan, SurfaceTapSequence, type SurfacePoint } from './precision-selection';
+import { captureSurfacePoint, surfaceWorldPoint, precisionFocusPlan, SurfaceTapSequence, type SurfacePoint } from './precision-selection';
 import { partIcon, treeChevron, initializeWorkbenchIcons, wireWorkbenchKeyboard } from './workbench-ui';
 import { DisassemblyView, type DisassemblySource } from './disassembly-view';
 import { brakeDisplayVariants } from './brake-representation';
@@ -356,6 +356,8 @@ let drivetrain: Drivetrain | null = null;
 let disassemblyView:DisassemblyView|null=null;
 let disassemblyLoading:Promise<void>|null=null;
 let partsPageOpen=false;
+let disassemblyOpenRevision=0;
+let disassemblyReturnView:{camera:THREE.PerspectiveCamera;target:THREE.Vector3;home:boolean;width:number;height:number}|null=null;
 let interactionLod: InteractionLod | null = null;
 let detailRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 let rotorSpinning = false;
@@ -1838,10 +1840,14 @@ function flyToPrecisionBounds(bounds:THREE.Box3,point:THREE.Vector3,forceLocal=f
   invalidateStaticFrame();
 }
 
-function focusPrecisionPick(pick:PrecisionPick):void{
-  modelTaps.clear();selectPrecisionPick(pick);pauseForPrecision();
-  const point=surfaceWorldPoint(pick.surface),bounds=pick.component?partBounds(pick.component):surfaceWorldBounds(pick.surface);
-  flyToPrecisionBounds(bounds,point,pick.owner.label==='叶片');
+function drillIntoPart(part:PartRecord,pick?:PrecisionPick):void{
+  modelTaps.clear();lastTreeTap=null;
+  if(pick)selectPrecisionPick(pick);else selectPart(part,false,true,false);
+  // The ghost nacelle is a viewing aid and deliberately absent from disassembly.
+  if(part.label==='机舱外壳'){
+    flyToPrecisionBounds(partBounds(part),pick?surfaceWorldPoint(pick.surface):partOrbitCenter(part));return;
+  }
+  void openDisassembly(true,part.label);
 }
 
 function selectTreePart(part:PartRecord,event:MouseEvent):void{
@@ -2879,7 +2885,7 @@ function renderPartList(query = ''): void {
       row.className = `part-row${selectedPart === part ? ' active' : ''}`;
       row.setAttribute('role', 'treeitem');row.setAttribute('aria-level','2');row.tabIndex=-1;row.dataset.treeKey=part.label;
       row.setAttribute('aria-selected', String(selectedPart === part));
-      row.title=(part.scopeDescription?`${part.scopeDescription}；`:'')+'单击选中，双击聚焦';
+      row.title=(part.scopeDescription?`${part.scopeDescription}；`:'')+(part.label==='机舱外壳'?'单击选中，双击聚焦':'单击选中，双击下钻展开');
       row.style.setProperty('--tree-order', String(renderedCount));
       row.innerHTML = `<span class="tree-node" aria-hidden="true">${partIcon(part.label)}</span><span><strong></strong></span><span class="visibility" aria-hidden="true">${selectedPart === part && partFocusActive ? '●' : ''}</span>`;
       row.querySelector('strong')!.textContent = part.label;
@@ -2948,7 +2954,7 @@ partsInspectorPanel.addEventListener('click',event=>{
   const previous=lastTreeTap;if(!previous||event.detail===0)return;
   if(performance.now()-previous.time<=500&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<=8){
     lastTreeTap=null;event.preventDefault();event.stopImmediatePropagation();
-    selectPart(previous.part,false,true,false);flyToPrecisionBounds(partBounds(previous.part),partOrbitCenter(previous.part),previous.part.label==='叶片');
+    drillIntoPart(previous.part);
   }
 },true);
 inspectorToggle.addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=false;setMobileInspectorOpen(!mobileInspectorOpen);});
@@ -3121,7 +3127,7 @@ function selectPartAtPointer(event:PointerEvent):void{
   restoreFullDetail();
   const hit=spatialIntersectionAtPoint(event.clientX,event.clientY),pick=hit?precisionPickFromHit(hit):null;
   const action=modelTaps.tap(event.clientX,event.clientY,event.timeStamp,event.pointerType,pick);
-  if(action.double&&action.value){focusPrecisionPick(action.value);return;}
+  if(action.double&&action.value){drillIntoPart(action.value.owner,action.value);return;}
   if(pick){setInspectorTab('parts',false);selectPrecisionPick(pick);}
   else clearPartFocus();
 }
@@ -3314,28 +3320,51 @@ function collectDisassemblySources():DisassemblySource[]{
   return sources.sort((a,b)=>order.indexOf(a.system)-order.indexOf(b.system));
 }
 
-async function openDisassembly(updateUrl=true):Promise<void>{
+function prepareDisassemblySources():{sources:DisassemblySource[];materials:Map<THREE.Mesh,THREE.Material|THREE.Material[]>}{
+  // Capture normal finishes and all main assemblies, independent of current selection,
+  // relationship fading, isolation or transmission cutaway. Restore the main view immediately.
+  const state={selectedPart,selectedRelationships,partFocusActive,isIsolated,presentationMode,displayMode,hidden:[...userHiddenParts]};
+  try{
+    selectedPart=null;selectedRelationships=null;partFocusActive=false;isIsolated=false;userHiddenParts.clear();setPresentationMode('overview');applyDisplayMode('xray');
+    const sources=collectDisassemblySources(),materials=new Map<THREE.Mesh,THREE.Material|THREE.Material[]>();
+    for(const source of sources)for(const {mesh} of source.pieces)materials.set(mesh,mesh.material);
+    return {sources,materials};
+  }finally{
+    selectedPart=state.selectedPart;selectedRelationships=state.selectedRelationships;partFocusActive=state.partFocusActive;isIsolated=state.isIsolated;
+    state.hidden.forEach(part=>userHiddenParts.add(part));setPresentationMode(state.presentationMode);applyDisplayMode(state.displayMode);
+  }
+}
+
+async function openDisassembly(updateUrl=true,system=''):Promise<void>{
   if(!modelRoot||partsPageOpen)return;
-  restoreFullDetail();setPresentationMode('overview');resetViewerView();applyDisplayMode('xray');partsPageOpen=true;controls.enabled=false;annotationPointerStart=null;modelPointerIds.clear();
+  const revision=++disassemblyOpenRevision;
+  modelTaps.clear();lastTreeTap=null;cancelPrecisionFlight();restoreFullDetail();
+  disassemblyReturnView=system?{camera:camera.clone(),target:controls.target.clone(),home:homeFramingActive,width:viewportWidth,height:viewportHeight}:null;
+  if(!system){setPresentationMode('overview');resetViewerView();applyDisplayMode('xray');}
+  setAnnotationMode(false);partsPageOpen=true;controls.enabled=false;annotationPointerStart=null;modelPointerIds.clear();
   if(demoAlarm.active){demoAlarm.muted=true;alarmSound.stop(true);}
   byId('app').classList.add('disassembly-mode');byId('disassembly-page').hidden=false;byId('disassembly-busy').hidden=false;byId('disassembly-error').hidden=true;
   canvas.setAttribute('aria-label','零件爆炸分解查看器');
   byId('disassembly-page').querySelectorAll<HTMLButtonElement|HTMLSelectElement|HTMLInputElement>('button:not(#disassembly-close),select,input').forEach(control=>{control.disabled=true;});
-  if(updateUrl){const url=new URL(location.href);url.searchParams.set('view','parts');history.pushState(null,'',url);}
+  byId('disassembly-busy').textContent=system?`正在展开${system}…`:'正在准备全部零件…';
+  if(updateUrl){const url=new URL(location.href);url.searchParams.set('view','parts');if(system)url.searchParams.set('assembly',system);else url.searchParams.delete('assembly');history.pushState(null,'',url);}
   try{
     if(!disassemblyView){
+      const snapshot=prepareDisassemblySources();
       disassemblyView=new DisassemblyView({renderer,canvas,page:byId('disassembly-page'),environment:scene.environment,axis:new THREE.Vector3(...(drivetrain?.anchors.lowAxis??[1,0,0]) as [number,number,number]),span:drivetrain?.bounds.getSize(new THREE.Vector3()).length()??10,majorSystems:majorPartGroups.flatMap(group=>group.parts.filter(part=>part.label!=='机舱外壳').map(part=>part.label)),camera:()=>camera,target:()=>controls.target.clone(),close:()=>closeDisassembly(),
         geometry:(mesh,detailed)=>interactionLod?.geometryFor(mesh,detailed)??mesh.geometry,
         interactionReady:()=>interactionLod?.ready??false,
-        material:mesh=>mesh.material});
-      disassemblyLoading=disassemblyView.initialize(collectDisassemblySources());
+        systemChanged:system=>{const url=new URL(location.href);if(url.searchParams.get('view')!=='parts')return;if(system)url.searchParams.set('assembly',system);else url.searchParams.delete('assembly');history.replaceState(null,'',url);},
+        material:mesh=>snapshot.materials.get(mesh)??mesh.material});
+      disassemblyLoading=disassemblyView.initialize(snapshot.sources).finally(()=>snapshot.materials.clear());
     }
     await disassemblyLoading;
-    if(!partsPageOpen)return;
+    if(!partsPageOpen||revision!==disassemblyOpenRevision)return;
     byId('disassembly-busy').hidden=true;
     byId('disassembly-page').querySelectorAll<HTMLButtonElement|HTMLSelectElement|HTMLInputElement>('button,select,input').forEach(control=>{control.disabled=false;});
-    disassemblyView.open();byId('disassembly-close').focus({preventScroll:true});
+    disassemblyView.open(system);byId('disassembly-close').focus({preventScroll:true});
   }catch(error){
+    if(revision!==disassemblyOpenRevision)return;
     console.error('零件分解准备失败',error);disassemblyView?.dispose();disassemblyView=null;disassemblyLoading=null;closeDisassembly();
     byId('disassembly-error').textContent='零件分解准备失败，请重试。';byId('disassembly-error').hidden=false;
   }
@@ -3343,16 +3372,20 @@ async function openDisassembly(updateUrl=true):Promise<void>{
 
 function closeDisassembly(updateUrl=true):void{
   if(!partsPageOpen)return;
+  disassemblyOpenRevision++;
   partsPageOpen=false;disassemblyView?.close();byId('disassembly-page').hidden=true;byId('app').classList.remove('disassembly-mode');controls.enabled=true;
   canvas.setAttribute('aria-label','风机三维模型查看器');
-  if(updateUrl){const url=new URL(location.href);url.searchParams.delete('view');history.replaceState(null,'',url);}
+  if(updateUrl){const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('assembly');history.replaceState(null,'',url);}
+  const restore=disassemblyReturnView;disassemblyReturnView=null;
+  if(restore){camera.copy(restore.camera);controls.target.copy(restore.target);homeFramingActive=restore.home;controls.update();}
   camera.aspect=viewportWidth/Math.max(1,viewportHeight);
-  if(homeFramingActive)fitHomeView();else if(camera.view?.enabled)applyPresentationOffset(presentationFrame());else camera.updateProjectionMatrix();
+  if(restore&&restore.width===viewportWidth&&restore.height===viewportHeight)camera.updateProjectionMatrix();
+  else if(homeFramingActive)fitHomeView();else if(camera.view?.enabled)applyPresentationOffset(presentationFrame());else camera.updateProjectionMatrix();
   previousFrameTime=performance.now();setRenderScale(restingRenderScale());invalidateStaticFrame();renderDemoAlarm();
   byId('disassembly-open').focus({preventScroll:true});
 }
 byId('disassembly-open').addEventListener('click',()=>{void openDisassembly();});
-window.addEventListener('popstate',()=>{if(new URL(location.href).searchParams.get('view')==='parts')void openDisassembly(false);else closeDisassembly(false);});
+window.addEventListener('popstate',()=>{const params=new URL(location.href).searchParams;if(params.get('view')==='parts')void openDisassembly(false,params.get('assembly')??'');else closeDisassembly(false);});
 
 function resetViewerView():void{
   modelTaps.clear();cancelPrecisionFlight();resumePrecisionMotion();
@@ -3576,7 +3609,8 @@ loader.load(
         viewport: [canvas.width, canvas.height],
       }),
     };
-    if(new URL(location.href).searchParams.get('view')==='parts')void openDisassembly(false);
+    const initialParams=new URL(location.href).searchParams;
+    if(initialParams.get('view')==='parts')void openDisassembly(false,initialParams.get('assembly')??'');
   },
   (event) => {
     const progress = event.total ? Math.round((event.loaded / event.total) * 100) : 0;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { packRectangles, planPartLayout, smoothStep } from './disassembly-layout';
+import { initialDisassemblyScope } from './disassembly-entry';
 
 export type PartPiece={mesh:THREE.Mesh;instanceId?:number};
 export type DisassemblySource={id:string;label:string;system:string;cluster:string;internal?:boolean;pieces:PartPiece[]};
@@ -9,7 +10,7 @@ type Piece={source:PartPiece;matrix:THREE.Matrix4;full:THREE.BufferGeometry;low:
 type Entry={id:string;label:string;system:string;cluster:string;internal:boolean;pieces:Piece[];bounds:THREE.Box3;visible:boolean;number:number};
 type Unit={id:string;label:string;members:Entry[];bounds:THREE.Box3;center:THREE.Vector3;offset:THREE.Vector3;tile:THREE.Vector3;tileScale:number;position:THREE.Vector3;scale:number;fromPosition:THREE.Vector3;fromScale:number;transform:THREE.Matrix4};
 type Batch={mesh:THREE.InstancedMesh;members:{entry:Entry;piece:Piece}[];full:THREE.BufferGeometry;low:THREE.BufferGeometry;owner:Unit|null;visibleMembers:{index:number;piece:Piece;unit:Unit}[]};
-type Options={renderer:THREE.WebGLRenderer;environment:THREE.Texture|null;canvas:HTMLCanvasElement;page:HTMLElement;axis:THREE.Vector3;span:number;majorSystems:string[];camera:()=>THREE.PerspectiveCamera;target:()=>THREE.Vector3;material:(mesh:THREE.Mesh)=>Finish;geometry:(mesh:THREE.Mesh,detailed:boolean)=>THREE.BufferGeometry;interactionReady:()=>boolean;close:()=>void};
+type Options={renderer:THREE.WebGLRenderer;environment:THREE.Texture|null;canvas:HTMLCanvasElement;page:HTMLElement;axis:THREE.Vector3;span:number;majorSystems:string[];camera:()=>THREE.PerspectiveCamera;target:()=>THREE.Vector3;material:(mesh:THREE.Mesh)=>Finish;geometry:(mesh:THREE.Mesh,detailed:boolean)=>THREE.BufferGeometry;interactionReady:()=>boolean;close:()=>void;systemChanged?:(system:string)=>void};
 
 /** 原始透视相机 + 总成 / 子总成 / 零件的逐级展示，源装配树保持只读。 */
 export class DisassemblyView{
@@ -155,11 +156,14 @@ export class DisassemblyView{
     }}
     const hubBounds=new THREE.Box3();this.entries.filter(e=>e.system==='轮毂总成'&&!e.internal).forEach(e=>hubBounds.union(e.bounds));if(!hubBounds.isEmpty())hubBounds.getCenter(this.hubAnchor);
   }
-  open():void{
+  open(system=''):void{
     this.active=true;this.options.page.hidden=false;this.referenceCamera.copy(this.options.camera());this.referenceTarget.copy(this.options.target());
-    this.refreshSnapshot();this.system='';this.cluster=null;this.scope.value='';this.search.value='';this.mode='explode';this.selected=null;this.bindingsDirty=true;this.detailAt=0;
+    this.refreshSnapshot();this.system='';this.cluster=null;this.scope.value='';this.search.value='';this.mode='explode';this.selected=null;this.bindingsDirty=true;this.detailAt=0;this.animation=null;this.hovered=null;this.pointer=null;this.dragging=false;this.uiState='';
     this.options.page.querySelector<HTMLElement>('#disassembly-list')!.hidden=true;
-    this.width=this.options.canvas.clientWidth;this.height=this.options.canvas.clientHeight;this.options.renderer.setPixelRatio(Math.min(devicePixelRatio,1));this.options.renderer.setSize(this.width,this.height,false);this.progress=0;this.resetOverviewCamera();this.buildUnits();this.applyProgress(0);this.animateTo(1);
+    this.options.page.querySelector('#disassembly-list-toggle')!.setAttribute('aria-expanded','false');
+    this.width=this.options.canvas.clientWidth;this.height=this.options.canvas.clientHeight;this.options.renderer.setPixelRatio(Math.min(devicePixelRatio,1));this.options.renderer.setSize(this.width,this.height,false);
+    // Resolve the destination before building or drawing: no whole-turbine explosion in between.
+    this.enterSystem(system);
   }
   close():void{this.active=false;this.animation=null;this.controls.enabled=false;this.pointer=null;this.options.page.hidden=true;}
   private rootOffset(system:string):THREE.Vector3{
@@ -207,14 +211,11 @@ export class DisassemblyView{
     this.options.page.querySelector<HTMLElement>('#disassembly-empty')!.hidden=this.units.length!==0;
   }
   private enterSystem(system:string):void{
-    if(system&&this.entries.filter(e=>e.system===system).length<=1){
-      if(this.system){this.system='';this.cluster=null;this.search.value='';this.mode='explode';this.animation=null;this.progress=1;this.buildUnits();this.resetOverviewCamera();}
-      this.scope.value='';const unit=this.units.find(u=>u.id===system);if(unit)this.inspectUnit(unit);return;
-    }
-    this.system=system;this.cluster=null;this.scope.value=system;this.search.value='';this.mode='explode';this.animation=null;this.progress=0;this.resetOverviewCamera();
+    const scope=initialDisassemblyScope(this.entries,system);
+    this.system=scope.system;this.cluster=scope.cluster;this.scope.value=this.system;this.search.value='';this.mode='explode';this.animation=null;this.progress=0;this.resetOverviewCamera();
     this.buildUnits();
-    if(this.system&&this.units.length===1&&this.units[0].members.length>1){this.cluster=this.units[0].id;this.buildUnits();}
-    this.fitCurrent();this.animateTo(1);
+    this.fitCurrent();if(this.units.length>1)this.animateTo(1);else this.applyProgress(0);
+    this.options.systemChanged?.(this.system);
   }
   private enterUnit(unit:Unit):void{
     if(!this.canExpand(unit)){this.inspectUnit(unit);return;}
@@ -286,15 +287,17 @@ export class DisassemblyView{
     const percentage=String(Math.round(this.progress*100));if(this.slider.value!==percentage)this.slider.value=percentage;
     const output=this.options.page.querySelector<HTMLOutputElement>('#disassembly-progress-value')!;if(output.value!==percentage+'%')output.value=percentage+'%';
     const state=[this.system,this.cluster,this.units.length,this.mode,!!this.selected,!!this.animation,this.progress<.01,this.progress>.98,this.progress===1].join('|');if(state===this.uiState)return;this.uiState=state;this.labelFrame=null;
-    const title=this.system?(this.cluster??this.system)+'分解':'主要总成分解';
+    const canSeparate=this.units.length>1,empty=this.units.length===0;
+    const title=this.system?(this.cluster??this.system)+(canSeparate?'分解':'观察'):'主要总成分解';
     this.options.page.querySelector('h1')!.textContent=title;
     this.options.page.querySelector('#disassembly-count')!.textContent=this.units.length+(this.cluster!==null?' 个零件':this.system?' 个部件':' 个总成');
     this.options.page.querySelector<HTMLElement>('#disassembly-back')!.hidden=!this.system;
-    this.options.page.querySelector<HTMLElement>('#disassembly-flat')!.hidden=!this.system;
+    this.options.page.querySelector<HTMLElement>('#disassembly-flat')!.hidden=!this.system||!canSeparate;
+    for(const id of ['disassembly-play','disassembly-assembled','disassembly-exploded','disassembly-flat','disassembly-progress'])this.options.page.querySelector<HTMLButtonElement|HTMLInputElement>('#'+id)!.disabled=!canSeparate;
     this.options.page.querySelector('#disassembly-list-toggle')!.textContent=this.system?'部件清单':'总成清单';
-    this.options.page.querySelector('#disassembly-stage')!.textContent=this.progress<.01?'装配状态':this.mode==='flat'?'当前平铺':'分级展开';
-    this.options.page.querySelector('#disassembly-play')!.textContent=this.animation?'暂停动画':this.progress===1?'重新展开':'继续展开';
-    this.options.page.querySelector('#disassembly-hint')!.textContent=this.selected?'点击空白处返回分解':!this.system?'点击总成，聚焦并展开内部':this.units.length>12?'悬停看名称，点击单独观察；清单保留全部语义':this.cluster===null?'点击部件继续展开；上一级返回整机':'点击零件单独观察';
+    this.options.page.querySelector('#disassembly-stage')!.textContent=empty?'无匹配零件':!canSeparate?'整体零件':this.progress<.01?'装配状态':this.mode==='flat'?'当前平铺':'分级展开';
+    this.options.page.querySelector('#disassembly-play')!.textContent=!canSeparate?'无需分解':this.animation?'暂停动画':this.progress===1?'重新展开':'继续展开';
+    this.options.page.querySelector('#disassembly-hint')!.textContent=empty?'请调整搜索条件':this.selected?'点击空白处返回分解':!canSeparate?(this.search.value?'点击当前部件单独查看':'当前模型为整体零件，可旋转观察'):!this.system?'点击总成，聚焦并展开内部':this.units.length>12?'悬停看名称，点击单独观察；清单保留全部语义':this.cluster===null?'点击部件继续展开；上一级返回整机':'点击零件单独观察';
     for(const [id,pressed]of[['assembled',this.progress<.01],['exploded',this.progress>.98&&this.mode==='explode'],['flat',this.progress>.98&&this.mode==='flat']] as const)this.options.page.querySelector('#disassembly-'+id)!.setAttribute('aria-pressed',String(pressed));
   }
   private currentBounds(unit:Unit):THREE.Box3{return unit.bounds.clone().translate(unit.center.clone().negate()).applyMatrix4(new THREE.Matrix4().makeScale(unit.scale,unit.scale,unit.scale)).translate(unit.position);}
