@@ -16,7 +16,7 @@
           <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="14" r="3"/><path d="m16 11 1-8c5 0 6 3 2 7m-6 5-7 4c-3-4-1-7 5-6m7 3 6 5c-2 4-6 3-7-2M16 17v12M11 29h10"/></svg>
           <h1>风机结构</h1>
         </div>
-        <span class="workbench-context">三维交互演示</span>
+        <span class="workbench-context">装配视图</span>
         <span class="workbench-note">结构示意</span>
       </header>
 
@@ -64,9 +64,9 @@
       <button id="inspector-toggle" class="inspector-toggle surface-panel" type="button" aria-controls="inspector" aria-expanded="false">零件面板</button>
       <aside id="inspector" class="inspector surface-panel" aria-label="主要零件树" data-mobile-open="false">
         <div class="inspector-tabs" role="tablist" aria-label="工程信息">
-          <button id="parts-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="parts-inspector-panel">零件树</button>
-          <button id="annotations-tab" type="button" role="tab" aria-selected="false" aria-controls="annotation-panel">标注记录 <b id="annotation-count">0</b></button>
-          <button id="sensors-tab" type="button" role="tab" aria-selected="false" aria-controls="sensor-panel">实时监测 <b id="sensor-alarm-count" hidden>0</b></button>
+          <button id="parts-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="parts-inspector-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h5v5H3Zm9 9h5v5h-5ZM5 8v6h7M12 3h5v5h-5Z"/></svg><span>零件树</span></button>
+          <button id="annotations-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-label="标注记录" aria-controls="annotation-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 3H3v14h14v-8M8 12l1-4 6-6 3 3-6 6Z"/></svg><span>标注</span><b id="annotation-count">0</b></button>
+          <button id="sensors-tab" type="button" role="tab" tabindex="-1" aria-selected="false" aria-label="实时监测" aria-controls="sensor-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10h4l2-6 4 12 2-6h4M3 3v14h14"/></svg><span>监测</span><b id="sensor-alarm-count" hidden>0</b></button>
         </div>
 
         <section class="inspector-tab-panel parts-inspector-panel" id="parts-inspector-panel" role="tabpanel" aria-labelledby="parts-tab">
@@ -76,8 +76,10 @@
           <input id="part-search" type="search" placeholder="搜索零件" aria-label="搜索零件" autocomplete="off" />
         </label>
 
+        <div class="assembly-summary"><span id="assembly-summary-title">整机装配</span><b id="assembly-count">加载中</b></div>
+
         <div class="selected-card" id="selected-card" hidden>
-          <strong id="selected-name"></strong>
+          <div><small class="selected-caption">当前零件</small><strong id="selected-name"></strong></div>
           <button id="clear-part-focus" type="button" disabled>清除选择</button>
         </div>
 
@@ -96,7 +98,7 @@
           </div>
           <div class="relation-associated"><div id="relationship-related"></div></div>
         </section>
-        <div class="part-results" id="part-results" role="listbox" aria-label="零件搜索结果">
+        <div class="part-results" id="part-results" role="tree" aria-label="风机装配结构">
           <p class="empty-note">加载中…</p>
         </div>
         </section>
@@ -205,8 +207,10 @@
       </aside>
 
       <nav class="viewer-toolbar surface-panel" aria-label="三维导航工具">
+        <div class="navigation-modes" role="group" aria-label="视角操作模式">
         <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><ellipse cx="12" cy="12" rx="4.5" ry="10" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="1"/></svg><span>旋转</span></button>
         <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span>平移</span></button>
+        </div>
         <i aria-hidden="true"></i>
         <button id="navigation-reset" type="button" title="复位视角"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/><path d="m9 10 3-2 3 2v5l-3 2-3-2Z"/></svg><span>复位视角</span></button>
         <i aria-hidden="true"></i>

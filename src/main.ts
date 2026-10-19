@@ -18,6 +18,7 @@ import modelIdentity from './model-identity.json';
 import { DemoAlarmState } from './demo-alarm';
 import { AlarmSound } from './alarm-sound';
 import { normalizeRotorSpeed } from './rotor-speed';
+import { partIcon, wireWorkbenchKeyboard } from './workbench-ui';
 import { DisassemblyView, type DisassemblySource } from './disassembly-view';
 import { brakeDisplayVariants } from './brake-representation';
 import './style.css';
@@ -1934,6 +1935,7 @@ function setInspectorTab(tab: 'parts' | 'annotations' | 'sensors',reveal=true): 
   partsTab.setAttribute('aria-selected', String(showParts));
   annotationsTab.setAttribute('aria-selected', String(showAnnotations));
   sensorsTab.setAttribute('aria-selected', String(showSensors));
+  partsTab.tabIndex=showParts?0:-1;annotationsTab.tabIndex=showAnnotations?0:-1;sensorsTab.tabIndex=showSensors?0:-1;
   updateSensorAlarmBadge();
   if (!showAnnotations) {
     setAnnotationMode(false);
@@ -2700,36 +2702,54 @@ async function initializeSensors(): Promise<void> {
   stopSensorStream = createDemoSensorAdapter().start(applySensorValue);
 }
 
+const collapsedPartGroups = new Set<string>();
 function renderPartList(query = ''): void {
   if (!majorPartGroups.length) return;
+  const focusedKey=results.contains(document.activeElement)?(document.activeElement as HTMLElement).dataset.treeKey:undefined;
   const normalized = query.trim().toLowerCase();
   results.replaceChildren();
   let renderedCount = 0;
-  majorPartGroups.forEach((group) => {
+  majorPartGroups.forEach((group,groupIndex) => {
     const filtered = group.parts.filter((part) => !normalized || part.label.toLowerCase().includes(normalized) || leafNodeName(part.node).toLowerCase().includes(normalized));
     if (!filtered.length) return;
     const section = document.createElement('section');
     section.className = 'tree-group';
-    const heading = document.createElement('h3');
-    heading.className = 'tree-group-label';
-    heading.textContent = group.label;
-    section.append(heading);
+    const heading=document.createElement('button');heading.type='button';heading.className='tree-group-toggle';
+    heading.setAttribute('role','treeitem');heading.setAttribute('aria-level','1');heading.tabIndex=-1;
+    heading.dataset.treeKey=`group-${groupIndex}`;heading.id=`part-group-${groupIndex}`;
+    heading.innerHTML='<svg class="tree-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg><span></span><b></b>';
+    heading.querySelector('span')!.textContent=group.label;heading.querySelector('b')!.textContent=String(filtered.length);
+    const children=document.createElement('div');children.className='tree-group-items';children.id=`part-group-items-${groupIndex}`;
+    children.setAttribute('role','group');children.setAttribute('aria-labelledby',heading.id);
+    heading.setAttribute('aria-controls',children.id);
+    const expanded=Boolean(normalized)||!collapsedPartGroups.has(group.label)||filtered.includes(selectedPart!);
+    heading.setAttribute('aria-expanded',String(expanded));children.hidden=!expanded;
+    heading.addEventListener('click',()=>{
+      const open=heading.getAttribute('aria-expanded')!=='true';heading.setAttribute('aria-expanded',String(open));children.hidden=!open;
+      if(open)collapsedPartGroups.delete(group.label);else collapsedPartGroups.add(group.label);
+    });
+    section.append(heading,children);
     filtered.forEach((part) => {
       const row = document.createElement('button');
       row.type = 'button';
       row.className = `part-row${selectedPart === part ? ' active' : ''}`;
-      row.setAttribute('role', 'option');
+      row.setAttribute('role', 'treeitem');row.setAttribute('aria-level','2');row.tabIndex=-1;row.dataset.treeKey=part.label;
       row.setAttribute('aria-selected', String(selectedPart === part));
       if(part.scopeDescription)row.title=part.scopeDescription;
       row.style.setProperty('--tree-order', String(renderedCount));
-      row.innerHTML = `<span class="tree-node" aria-hidden="true"><i></i></span><span><strong></strong></span><span class="visibility" aria-hidden="true">${selectedPart === part && partFocusActive ? '●' : '○'}</span>`;
+      row.innerHTML = `<span class="tree-node" aria-hidden="true">${partIcon(part.label)}</span><span><strong></strong></span><span class="visibility" aria-hidden="true">${selectedPart === part && partFocusActive ? '●' : ''}</span>`;
       row.querySelector('strong')!.textContent = part.label;
       row.addEventListener('click', () => selectPart(part, true, true));
-      section.append(row);
+      children.append(row);
       renderedCount += 1;
     });
     results.append(section);
   });
+  const entry=results.querySelector<HTMLElement>('.part-row.active')??results.querySelector<HTMLElement>('[role="treeitem"]');
+  if(entry)entry.tabIndex=0;
+  if(focusedKey){const focus=[...results.querySelectorAll<HTMLElement>('[data-tree-key]')].find(row=>row.dataset.treeKey===focusedKey);if(focus?.getClientRects().length)focus.focus({preventScroll:true});}
+  byId('assembly-count').textContent=`${renderedCount} 项总成`;
+  byId('assembly-summary-title').textContent=normalized?'筛选结果':'整机装配';
   if (!renderedCount) {
     const empty = document.createElement('p');
     empty.className = 'empty-note';
@@ -2789,6 +2809,7 @@ setMobileInspectorOpen(false);
 partsTab.addEventListener('click', () => setAnnotationPanelOpen(false));
 annotationsTab.addEventListener('click', () => setAnnotationPanelOpen(true));
 sensorsTab.addEventListener('click', () => setInspectorTab('sensors'));
+wireWorkbenchKeyboard([partsTab,annotationsTab,sensorsTab],results);
 annotationToggle.addEventListener('click', beginAnnotationPlacement);
 annotationClose.addEventListener('click', () => setAnnotationPanelOpen(false));
 annotationModeButton.addEventListener('click', () => {
@@ -3064,6 +3085,7 @@ const speedSlider=byId<HTMLInputElement>('rotor-speed-slider');
 speedSlider.addEventListener('input',()=>setRotorSpeed(Number(speedSlider.value)));
 function setRotorSpeed(rpm:number):void{
   const value=normalizeRotorSpeed(rpm);speedSlider.value=String(value);
+  speedSlider.style.setProperty('--speed-position',`${value/20*100}%`);
   speedSlider.setAttribute('aria-valuetext',value===0?'停止':`${value.toFixed(1)} 转每分`);byId<HTMLOutputElement>('rotor-speed-value').value=value.toFixed(1);
   if(drivetrain){drivetrain.rpm=value;setMotionRunning(value>0);}
 }
