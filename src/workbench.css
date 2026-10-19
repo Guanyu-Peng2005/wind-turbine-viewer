@@ -16,16 +16,16 @@
 
 /* The drill-down view shares the same annotations, calibrated points and alarm UI. */
 #app.disassembly-mode > #inspector { display:none!important; }
-#app.disassembly-mode.disassembly-tools-open > #inspector { display:flex!important; z-index:22; top:calc(var(--drill-header-bottom,64px) + 12px); bottom:150px; right:12px; left:auto; width:300px; padding:12px; border:1px solid var(--ui-line); border-radius:7px; }
+#app.disassembly-mode.disassembly-tools-open > #inspector { display:flex!important; z-index:22; top:var(--drill-header-bottom,48px); bottom:0; right:0; left:auto; width:var(--ui-rail); padding:12px; border:0; border-left:1px solid var(--ui-line); border-radius:0; background:var(--ui-panel); box-shadow:none; }
 #app.disassembly-mode #parts-tab { display:none; }
 #app.disassembly-mode .inspector-tabs { grid-template-columns:1fr 1fr; }
 #app.disassembly-mode > :is(#annotation-overlay,#sensor-overlay) { z-index:11; }
 #app.disassembly-mode > #alarm-edge { z-index:12; }
 #app.disassembly-mode > #alarm-banner { z-index:21; top:calc(var(--drill-header-bottom,64px) + 12px); left:12px; right:12px; }
-#app.disassembly-mode.disassembly-tools-open > #alarm-banner { right:328px; }
+#app.disassembly-mode.disassembly-tools-open > #alarm-banner { right:calc(var(--ui-rail) + 16px); }
 .workbench .disassembly-tools { display:flex; align-items:center; gap:6px; }
-.workbench #disassembly-page .disassembly-tools button { border:1px solid #ffffff16; color:#d8e5ef; background:#263a47; }
-.workbench #disassembly-page .disassembly-tools button[aria-expanded="true"] { color:#edcf90; background:#3d372b; border-color:#9b8253; }
+.workbench #disassembly-page .disassembly-tools button { border:0; color:var(--ui-muted); background:transparent; }
+.workbench #disassembly-page .disassembly-tools button[aria-expanded="true"] { color:var(--ui-ink); background:#ffffff0c; }
 #disassembly-tool-hint { color:#dfc48c; font-size:11px; }
 .workbench #annotation-send-alarm { width:100%; min-height:36px; color:#ffd2bd; background:#61352f; border:1px solid #936052; border-radius:4px; }
 @media(max-width:900px),(pointer:coarse) and (max-width:1400px) {
@@ -227,13 +227,13 @@
 .workbench .alarm-banner { top:64px; left:16px; right:calc(var(--scene-right) + 16px); max-width:none; }
 
 /* Disassembly uses the same two floating surfaces and typography. */
-.workbench .disassembly-header { top:0; left:0; right:0; min-height:52px; padding:8px 16px; background:var(--ui-panel); border:0; border-bottom:1px solid var(--ui-line); border-radius:0; color:var(--ui-ink); box-shadow:none; }
+.workbench .disassembly-header { top:0; left:0; right:0; min-height:48px; padding:8px 16px; background:var(--ui-panel); border:0; border-bottom:1px solid var(--ui-line); border-radius:0; color:var(--ui-ink); box-shadow:none; }
 .workbench .disassembly-heading { gap:12px; }
-.workbench .disassembly-heading h1 { font:500 14px/1.4 "Microsoft YaHei UI",sans-serif; letter-spacing:0; }
+.workbench .disassembly-heading h1 { font-family:inherit; font-size:14px; font-weight:500; line-height:1.4; letter-spacing:0; }
 .workbench #disassembly-count { color:#9bafbd; font-size:11px; }
 .workbench #disassembly-page button { min-height:32px; padding:0 10px; color:#c9d7e0; background:#ffffff06; border:0; border-radius:4px; font-size:12px; box-shadow:none; }
 .workbench #disassembly-page button:hover { background:#ffffff0e; }
-.workbench #disassembly-page button[aria-pressed="true"] { color:#e3cc99; background:#39352b; border:0; }
+.workbench #disassembly-page button[aria-pressed="true"] { color:#e0ebf3; background:#ffffff0c; border:0; }
 .workbench #disassembly-close { background:transparent; color:#a5bdd0; padding-left:12px; }
 .workbench #disassembly-close::before { display:none; }
 .workbench .disassembly-filters :is(select,input) { height:32px; color:#d4e0e8; background:#ffffff04; border:1px solid #ffffff09; border-radius:4px; font-size:12px; }

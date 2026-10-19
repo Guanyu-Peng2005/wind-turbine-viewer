@@ -1847,14 +1847,14 @@ function flyToPrecisionBounds(bounds:THREE.Box3,point:THREE.Vector3,forceLocal=f
   invalidateStaticFrame();
 }
 
-function drillIntoPart(part:PartRecord,pick?:PrecisionPick):void{
+function focusMainPart(part:PartRecord,pick?:PrecisionPick):void{
   modelTaps.clear();lastTreeTap=null;
   if(pick)selectPrecisionPick(pick);else selectPart(part,false,true,false);
-  // The ghost nacelle is a viewing aid and deliberately absent from disassembly.
-  if(part.label==='机舱外壳'){
-    flyToPrecisionBounds(partBounds(part),pick?surfaceWorldPoint(pick.surface):partOrbitCenter(part));return;
-  }
-  void openDisassembly(true,part.label);
+  // Observation stays in the assembly workspace; only the explicit disassembly
+  // control opens the separate decomposition tool.
+  const point=pick?surfaceWorldPoint(pick.surface):partOrbitCenter(part);
+  const bounds=pick?(pick.component?partBounds(pick.component):surfaceWorldBounds(pick.surface)):partBounds(part);
+  flyToPrecisionBounds(bounds,point,part.label==='叶片');
 }
 
 function selectTreePart(part:PartRecord,event:MouseEvent):void{
@@ -2920,7 +2920,7 @@ function renderPartList(query = ''): void {
       row.className = `part-row${selectedPart === part ? ' active' : ''}`;
       row.setAttribute('role', 'treeitem');row.setAttribute('aria-level','2');row.tabIndex=-1;row.dataset.treeKey=part.label;
       row.setAttribute('aria-selected', String(selectedPart === part));
-      row.title=(part.scopeDescription?`${part.scopeDescription}；`:'')+(part.label==='机舱外壳'?'单击选中，双击聚焦':'单击选中，双击下钻展开');
+      row.title=(part.scopeDescription?`${part.scopeDescription}；`:'')+'单击选中，双击聚焦查看';
       row.style.setProperty('--tree-order', String(renderedCount));
       row.innerHTML = `<span class="tree-node" aria-hidden="true">${partIcon(part.label)}</span><span><strong></strong></span><span class="visibility" aria-hidden="true">${selectedPart === part && partFocusActive ? '●' : ''}</span>`;
       row.querySelector('strong')!.textContent = part.label;
@@ -2990,7 +2990,7 @@ partsInspectorPanel.addEventListener('click',event=>{
   const previous=lastTreeTap;if(!previous||event.detail===0)return;
   if(performance.now()-previous.time<=500&&Math.hypot(event.clientX-previous.x,event.clientY-previous.y)<=8){
     lastTreeTap=null;event.preventDefault();event.stopImmediatePropagation();
-    drillIntoPart(previous.part);
+    focusMainPart(previous.part);
   }
 },true);
 inspectorToggle.addEventListener('click',()=>{if(!compactViewport.matches)desktopInspectorCollapsed=false;setMobileInspectorOpen(!mobileInspectorOpen);});
@@ -3167,7 +3167,7 @@ function selectPartAtPointer(event:PointerEvent):void{
   restoreFullDetail();
   const hit=spatialIntersectionAtPoint(event.clientX,event.clientY),pick=hit?precisionPickFromHit(hit):null;
   const action=modelTaps.tap(event.clientX,event.clientY,event.timeStamp,event.pointerType,pick);
-  if(action.double&&action.value){drillIntoPart(action.value.owner,action.value);return;}
+  if(action.double&&action.value){focusMainPart(action.value.owner,action.value);return;}
   if(pick){setInspectorTab('parts',false);selectPrecisionPick(pick);}
   else clearPartFocus();
 }

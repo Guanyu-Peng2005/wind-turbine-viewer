@@ -192,7 +192,16 @@ export class DisassemblyView{
     // Tool panels and rotation of the device change the camera frame, not the part layout.
     if(this.selected)this.fitBounds(this.currentBounds(this.selected));
     else if(!this.system||this.system==='叶片')this.resetOverviewCamera();
-    else{const bounds=new THREE.Box3();for(const unit of this.units)bounds.union(this.currentBounds(unit));this.fitBounds(bounds);}
+    else{
+      const bounds=new THREE.Box3();for(const unit of this.units){
+        bounds.union(this.currentBounds(unit));
+        if(this.animation){
+          const target=this.mode==='flat'?unit.tile:unit.center.clone().add(unit.offset),scale=this.mode==='flat'?unit.tileScale:1;
+          bounds.union(unit.bounds.clone().translate(unit.center.clone().negate()).applyMatrix4(new THREE.Matrix4().makeScale(scale,scale,scale)).translate(target));
+        }
+      }
+      this.fitBounds(bounds);
+    }
     this.dirty=true;
   }
   focusSource(mesh:THREE.Mesh,instanceId?:number):boolean{
