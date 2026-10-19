@@ -25,6 +25,7 @@ import './presentation.css';
 import './responsive.css';
 import './alarm-presentation.css';
 import './disassembly.css';
+import './workbench.css';
 
 type DisplayMode = 'solid' | 'xray' | 'section';
 type PartRole = 'shell' | 'auxiliary' | 'internal';
@@ -1458,9 +1459,8 @@ type PresentationFrame={left:number;top:number;width:number;height:number};
 
 function updateDesktopProportions():void{
   const desktop=!compactViewport.matches;
-  // The accepted desktop composition is 1915 × 958 CSS pixels. Scale the UI
-  // with its available viewport, not the monitor DPR (which also includes zoom).
-  desktopUiScale=desktop?Math.max(.5,Math.min(1,canvas.clientWidth/1915,canvas.clientHeight/958)):1;
+  // Responsive layout owns spacing; preserve readable CSS-pixel type sizes.
+  desktopUiScale=1;
   const app=byId('app');
   app.classList.toggle('desktop-proportions',desktop);
   app.style.setProperty('--desktop-ui-scale',String(desktopUiScale));
@@ -1471,7 +1471,9 @@ function presentationFrame():PresentationFrame{
   const canvasRect=canvas.getBoundingClientRect(),panel=inspector.getBoundingClientRect();
   const toolbar=document.querySelector<HTMLElement>('.viewer-toolbar')!.getBoundingClientRect();
   const compact=compactViewport.matches,margin=compact?12:24*desktopUiScale,left=margin;
-  let top=compact?Math.max(inspectorToggle.getBoundingClientRect().bottom,document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect().bottom)-canvasRect.top+12:margin;
+  const header=document.querySelector<HTMLElement>('.workbench-header')!.getBoundingClientRect();
+  const simulationControls=document.querySelector<HTMLElement>('.transmission-control')!.getBoundingClientRect();
+  let top=Math.max(header.bottom,simulationControls.bottom)-canvasRect.top+margin;
   if(!alarmBanner.hidden)top=Math.max(top,alarmBanner.getBoundingClientRect().bottom-canvasRect.top+margin);
   let right=viewportWidth-margin,bottom=Math.min(viewportHeight-margin,toolbar.top-canvasRect.top-(compact?20:20*desktopUiScale));
   if(!pointAlarmConsole.hidden)bottom=Math.min(bottom,pointAlarmConsole.getBoundingClientRect().top-canvasRect.top-margin);

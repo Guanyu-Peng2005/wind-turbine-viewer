@@ -3,14 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#07151d" />
+    <meta name="theme-color" content="#16232c" />
     <meta name="description" content="风机机舱内部传动链透视运动演示" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23007e8c'/%3E%3Ccircle cx='32' cy='32' r='5' fill='white'/%3E%3Cpath d='M30 27 31 8c8 0 12 5 8 12l-5 8M27 34 10 44c-4-7-1-13 7-13l10 1M37 35l17 10c-4 7-12 7-15 1l-5-9' fill='white'/%3E%3C/svg%3E" />
     <title>风机机舱 · 传动链透视演示</title>
   </head>
   <body>
-    <div id="app">
+    <div id="app" class="workbench">
       <canvas id="viewer" aria-label="风机三维模型查看器"></canvas>
+      <header class="workbench-header">
+        <div class="workbench-identity">
+          <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="14" r="3"/><path d="m16 11 1-8c5 0 6 3 2 7m-6 5-7 4c-3-4-1-7 5-6m7 3 6 5c-2 4-6 3-7-2M16 17v12M11 29h10"/></svg>
+          <h1>风机结构</h1>
+        </div>
+        <span class="workbench-context">三维交互演示</span>
+        <span class="workbench-note">结构示意</span>
+      </header>
 
       <div class="annotation-overlay" id="annotation-overlay" aria-live="polite"></div>
       <div class="sensor-overlay" id="sensor-overlay" aria-live="polite"></div>
@@ -197,13 +205,13 @@
       </aside>
 
       <nav class="viewer-toolbar surface-panel" aria-label="三维导航工具">
-        <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><span>旋转</span></button>
-        <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><span>平移</span></button>
+        <button id="navigation-orbit" class="active" type="button" aria-pressed="true" title="旋转（1）"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><ellipse cx="12" cy="12" rx="4.5" ry="10" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="1"/></svg><span>旋转</span></button>
+        <button id="navigation-pan" type="button" aria-pressed="false" title="平移（2）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span>平移</span></button>
         <i aria-hidden="true"></i>
-        <button id="navigation-reset" type="button" title="复位视角"><span>复位视角</span></button>
+        <button id="navigation-reset" type="button" title="复位视角"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6"/><path d="m9 10 3-2 3 2v5l-3 2-3-2Z"/></svg><span>复位视角</span></button>
         <i aria-hidden="true"></i>
-        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console" title="报警点位"><span>报警点位</span></button>
-        <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注"><span>添加标注</span></button>
+        <button id="sensor-layer-toggle" type="button" class="sensor-layer" aria-pressed="false" aria-expanded="false" aria-controls="point-alarm-console" title="报警点位"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z"/><path d="M12 7v4m0 3h.01"/></svg><span>报警点位</span></button>
+        <button id="annotation-toggle" class="accent" type="button" aria-pressed="false" aria-controls="annotation-panel" title="添加标注"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-4-4L5 15Z"/></svg><span>添加标注</span></button>
         <section id="point-alarm-console" class="point-alarm-console alarm-console" aria-label="报警点位演示" hidden>
           <label class="sr-only" for="point-alarm-source">选择演示告警测点</label>
           <select id="point-alarm-source" disabled></select>
@@ -258,7 +266,7 @@
             <label for="rotor-speed-slider"><span>叶轮转速</span><b><output id="rotor-speed-value">10.0</output><small>转/分</small></b></label>
             <input id="rotor-speed-slider" type="range" min="0" max="20" step="0.5" value="10" aria-label="叶轮演示转速" aria-valuetext="10.0 转每分" title="左右拖动调速，调至零停止" disabled />
           </div>
-          <button id="disassembly-open" type="button" disabled>零件分解</button>
+          <button id="disassembly-open" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></svg><span>零件分解</span></button>
         </div>
         <span id="disassembly-error" role="alert" hidden></span>
       </section>
